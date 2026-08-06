@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Alexandria RAG{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('send_static', path='style.css') }}">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h1 class="app-title">Alexandria RAG</h1>
+                <p class="app-subtitle">Semantic Search</p>
+            </div>
+
+            <ul class="nav-menu">
+                <li><a href="/" class="nav-link {% if request.path == '/' %}active{% endif %}">
+                    <span class="icon">📊</span> Dashboard
+                </a></li>
+                <li><a href="/search" class="nav-link {% if request.path == '/search' %}active{% endif %}">
+                    <span class="icon">🔍</span> Search
+                </a></li>
+                <li><a href="/indexing" class="nav-link {% if request.path == '/indexing' %}active{% endif %}">
+                    <span class="icon">⚙️</span> Indexing
+                </a></li>
+                <li><a href="/books" class="nav-link {% if request.path == '/books' %}active{% endif %}">
+                    <span class="icon">📚</span> Books
+                </a></li>
+                <li><a href="/tuning" class="nav-link {% if request.path == '/tuning' %}active{% endif %}">
+                    <span class="icon">🎛️</span> Tuning
+                </a></li>
+                <li><a href="/management" class="nav-link {% if request.path == '/management' %}active{% endif %}">
+                    <span class="icon">🛠️</span> Management
+                </a></li>
+                <li><a href="/guide" class="nav-link {% if request.path == '/guide' %}active{% endif %}">
+                    <span class="icon">📖</span> Guide
+                </a></li>
+                <li><a href="http://127.0.0.1:8765" class="nav-link" target="_blank" rel="noopener">
+                    <span class="icon">📚</span> Vault Dashboard ↗
+                </a></li>
+            </ul>
+
+            <div class="sidebar-footer">
+                <p class="footer-text">Local RAG System</p>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="content-wrapper">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+
+    <script src="{{ url_for('send_static', path='script.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,354 @@
+{% extends 'base.html' %}
+
+{% block title %}Tuning - Alexandria RAG{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Index Tuning</h1>
+    <p class="subtitle">Tune search live, or rebuild with a different index type — all torch-free, no segfaults.</p>
+</div>
+
+<!-- Current index status -->
+<div class="tune-card">
+    <h2>Current Index</h2>
+    <div id="index-status" class="status-grid">
+        <div class="status-item"><span class="label">Type</span><span id="cur-type" class="value">—</span></div>
+        <div class="status-item"><span class="label">Metric <span class="tip" data-tip="cosine = inner product on normalized vectors (what MiniLM/BGE/E5 are trained for). L2 = raw Euclidean distance. Cosine is recommended.">ⓘ</span></span><span id="cur-metric" class="value">—</span></div>
+        <div class="status-item"><span class="label">Vectors</span><span id="cur-ntotal" class="value">—</span></div>
+        <div class="status-item"><span class="label">Size</span><span id="cur-size" class="value">—</span></div>
+        <div class="status-item"><span class="label">Accuracy vs Flat <span class="tip" data-tip="Top-10 overlap between this index and an exact brute-force search, measured at build time. 100% = identical to exact search.">ⓘ</span></span><span id="cur-acc" class="value">—</span></div>
+    </div>
+</div>
+
+<!-- Live search tuning -->
+<div class="tune-card">
+    <h2>Live Search Tuning <span class="hint">applies instantly — no rebuild</span></h2>
+    <div class="search-box">
+        <input type="text" id="q" class="search-input" placeholder="Type a test query and tune the sliders...">
+        <button id="go" class="btn btn-primary">🔍 Search</button>
+    </div>
+
+    <div class="sliders">
+        <div class="slider-row">
+            <label>Results (k) <span class="tip" data-tip="How many passages to return per query. Doesn't change the index — just how many of the top matches you see.">ⓘ</span>: <strong id="k-val">5</strong></label>
+            <input type="range" id="k" min="1" max="20" value="5">
+        </div>
+        <div class="slider-row" id="nprobe-row">
+            <label>nprobe <span class="tip" data-tip="How many of the nlist clusters to scan per query. 1 = fastest/least accurate; nlist = scans everything (≈exact). Find the lowest value that holds your recall. Applies instantly.">ⓘ</span> <span class="hint">clusters searched — higher = more accurate, slower</span>: <strong id="nprobe-val">50</strong></label>
+            <input type="range" id="nprobe" min="1" max="256" value="50">
+        </div>
+        <div class="slider-row hidden" id="ef-row">
+            <label>efSearch <span class="tip" data-tip="How many graph neighbors HNSW explores per query. Higher = more accurate and slower. Must be ≥ k. Applies instantly.">ⓘ</span> <span class="hint">graph breadth — higher = more accurate, slower</span>: <strong id="ef-val">64</strong></label>
+            <input type="range" id="ef" min="8" max="512" value="64">
+        </div>
+        <p id="tune-note" class="hint"></p>
+    </div>
+
+    <div id="latency" class="latency hidden"></div>
+    <div id="results-list" class="results-list"></div>
+</div>
+
+<!-- Sweep graph -->
+<div class="tune-card">
+    <h2>Recall vs Latency Sweep <span class="tip" data-tip="Runs ~25 sample queries across a range of nprobe (or efSearch) values and plots how recall and per-query latency change. Recall = top-k overlap vs an exhaustive search of the same index, so 100% = exact. The 'knee' is where recall stops rising but latency keeps climbing — the best setting sits just past it.">ⓘ</span></h2>
+    <p class="hint">Finds the sweet spot for the current index: where recall is near-max but latency is still low.</p>
+    <button id="sweep-btn" class="btn btn-primary">📈 Run sweep</button>
+    <span id="sweep-status" class="hint"></span>
+    <div id="sweep-wrap" class="hidden" style="margin-top:1rem;">
+        <canvas id="sweep-chart" height="120"></canvas>
+        <p id="sweep-rec" class="sweep-rec"></p>
+    </div>
+</div>
+
+<!-- Rebuild panel -->
+<div class="tune-card">
+    <h2>Rebuild Index <span class="hint">reuses existing embeddings — minutes, not hours</span></h2>
+
+    <div class="slider-row">
+        <label for="itype">Index type <span class="tip" data-tip="Flat = exact, slow. IVFFlat = cluster buckets, fast + near-exact (best default at 1.8M vectors). IVFPQ = compressed, smallest/fastest but lossy. HNSW = graph, very fast queries but high RAM.">ⓘ</span></label>
+        <select id="itype">
+            <option value="ivfflat">IVFFlat — fast, ~exact (recommended)</option>
+            <option value="flat">Flat — exact brute force, slowest</option>
+            <option value="ivfpq">IVFPQ — compressed, smallest/fastest, lossy</option>
+            <option value="hnsw">HNSW — graph, very fast, high RAM</option>
+        </select>
+    </div>
+    <p id="type-desc" class="type-desc"></p>
+
+    <div class="slider-row">
+        <label for="metric">Distance metric <span class="tip" data-tip="cosine (recommended): vectors are L2-normalized and compared by inner product — what all-MiniLM / BGE / E5 are trained for. L2: raw Euclidean distance, sensitive to vector magnitude. Switching to cosine is a free retrieval-quality gain (Tier 1 in the Guide).">ⓘ</span></label>
+        <select id="metric">
+            <option value="ip">Cosine (normalized — recommended)</option>
+            <option value="l2">L2 / Euclidean</option>
+        </select>
+    </div>
+
+    <!-- IVF params -->
+    <div class="param-group" data-for="ivfflat ivfpq">
+        <div class="slider-row"><label>nlist (clusters) <span class="tip" data-tip="Number of Voronoi clusters the vectors are partitioned into. Rule of thumb ≈ 4·√N ≈ 5,400 for 1.8M vectors. More clusters = finer buckets = faster at equal recall, but slightly longer training.">ⓘ</span>: <strong id="nlist-val">1000</strong></label>
+            <input type="range" id="nlist" min="64" max="8192" step="64" value="1000"></div>
+        <div class="slider-row"><label>nprobe (default) <span class="tip" data-tip="Default clusters scanned per query, baked into the saved index. You can still override it live with the slider above. Higher = more accurate, slower.">ⓘ</span>: <strong id="bnprobe-val">50</strong></label>
+            <input type="range" id="bnprobe" min="1" max="512" value="50"></div>
+    </div>
+    <!-- PQ params -->
+    <div class="param-group hidden" data-for="ivfpq">
+        <div class="slider-row"><label>PQ subquantizers (m) <span class="tip" data-tip="Each vector is split into m sub-vectors, each compressed to one byte (at 8 bits). m must divide the dimension (384). Bytes/vector = m, so m=64 → 64 bytes vs 1536 raw (24× smaller). Higher m = more accurate but larger.">ⓘ</span>: <strong id="pqm-val">64</strong></label>
+            <input type="range" id="pqm" min="8" max="192" step="8" value="64"></div>
+        <div class="slider-row"><label>bits per subquantizer <span class="tip" data-tip="Bits used for each sub-vector's codebook (2^bits centroids). 8 is standard (256 centroids). Lower = smaller and faster but lossier.">ⓘ</span>: <strong id="pqbits-val">8</strong></label>
+            <input type="range" id="pqbits" min="4" max="8" value="8"></div>
+    </div>
+    <!-- HNSW params -->
+    <div class="param-group hidden" data-for="hnsw">
+        <div class="slider-row"><label>M (neighbors) <span class="tip" data-tip="Edges per node in the graph. Higher M = better recall and faster search but more RAM and slower build. 16–48 is typical; 32 is a good default.">ⓘ</span>: <strong id="hm-val">32</strong></label>
+            <input type="range" id="hm" min="8" max="64" step="4" value="32"></div>
+        <div class="slider-row"><label>efConstruction <span class="tip" data-tip="Search breadth while BUILDING the graph. Higher = better-quality graph (higher recall) but slower one-time build. 100–400 typical.">ⓘ</span>: <strong id="hefc-val">200</strong></label>
+            <input type="range" id="hefc" min="40" max="500" step="10" value="200"></div>
+        <div class="slider-row"><label>efSearch (default) <span class="tip" data-tip="Default search breadth at query time (also tunable live above). Higher = more accurate, slower. Must be ≥ k.">ⓘ</span>: <strong id="hefs-val">64</strong></label>
+            <input type="range" id="hefs" min="8" max="512" value="64"></div>
+    </div>
+
+    <button id="rebuild" class="btn btn-primary">⚙️ Rebuild Index</button>
+
+    <div id="rebuild-progress" class="rebuild-progress hidden">
+        <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+        <p id="progress-msg" class="progress-msg"></p>
+    </div>
+</div>
+
+<style>
+.tune-card { background:#fff; border:1px solid #e0e0e0; border-radius:10px; padding:1.5rem; margin-bottom:1.5rem; }
+.tune-card h2 { margin-bottom:1rem; font-size:1.15rem; }
+.hint { color:#999; font-weight:400; font-size:0.8rem; }
+.status-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:1rem; }
+.status-item { display:flex; flex-direction:column; gap:0.25rem; }
+.status-item .label { font-size:0.75rem; color:#888; text-transform:uppercase; letter-spacing:0.04em; }
+.status-item .value { font-size:1.1rem; font-weight:600; color:#1a1a1a; }
+.search-box { display:flex; gap:0.5rem; margin-bottom:1rem; }
+.search-input { flex:1; padding:0.7rem 1rem; font-size:1rem; border:2px solid #e0e0e0; border-radius:8px; }
+.search-input:focus { outline:none; border-color:#2196F3; }
+.sliders { display:flex; flex-direction:column; gap:0.9rem; margin-bottom:1rem; }
+.slider-row { display:flex; flex-direction:column; gap:0.35rem; }
+.slider-row label { font-size:0.9rem; color:#333; }
+.slider-row input[type=range] { width:100%; }
+.slider-row select { padding:0.5rem; border:2px solid #e0e0e0; border-radius:6px; font-size:0.95rem; }
+.hidden { display:none; }
+.latency { padding:0.5rem 0.75rem; background:#eef6ff; border-radius:6px; font-size:0.85rem; color:#1565c0; margin-bottom:1rem; }
+.results-list { display:flex; flex-direction:column; gap:0.75rem; }
+.result-item { padding:0.9rem; background:#f9f9f9; border:1px solid #e0e0e0; border-left:4px solid #2196F3; border-radius:6px; }
+.result-item .rt { font-weight:600; margin-bottom:0.3rem; }
+.result-item .rm { font-size:0.8rem; color:#666; margin-bottom:0.4rem; }
+.result-item .rp { font-size:0.9rem; color:#333; background:#fff; padding:0.5rem; border-radius:4px; }
+.type-desc { font-size:0.85rem; color:#555; background:#f6f6f6; padding:0.6rem 0.8rem; border-radius:6px; margin-bottom:1rem; }
+.param-group { border-top:1px dashed #e0e0e0; padding-top:0.9rem; margin-bottom:0.9rem; display:flex; flex-direction:column; gap:0.9rem; }
+.rebuild-progress { margin-top:1rem; }
+.progress-bar { height:10px; background:#e0e0e0; border-radius:5px; overflow:hidden; }
+.progress-fill { height:100%; width:0%; background:#4CAF50; transition:width 0.3s; }
+.progress-msg { font-size:0.85rem; color:#555; margin-top:0.5rem; font-family:monospace; }
+.btn-primary:disabled { opacity:0.5; cursor:not-allowed; }
+/* Info tooltips */
+.tip { display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px;
+  border-radius:50%; background:#cfe3f7; color:#1565c0; font-size:11px; font-weight:700;
+  cursor:help; position:relative; vertical-align:middle; user-select:none; }
+.tip:hover { background:#2196F3; color:#fff; }
+.tip::after { content:attr(data-tip); position:absolute; bottom:140%; left:50%; transform:translateX(-50%);
+  width:260px; background:#1a2733; color:#f0f4f8; font-size:0.78rem; font-weight:400; line-height:1.4;
+  padding:0.6rem 0.7rem; border-radius:8px; box-shadow:0 4px 14px rgba(0,0,0,0.25);
+  opacity:0; visibility:hidden; transition:opacity 0.15s; z-index:50; text-align:left; pointer-events:none; }
+.tip:hover::after { opacity:1; visibility:visible; }
+.sweep-rec { margin-top:0.75rem; padding:0.6rem 0.8rem; background:#e8f5e9; border-radius:6px;
+  font-size:0.88rem; color:#2e7d32; }
+.sweep-rec.warn { background:#fff3e0; color:#b26a00; }
+</style>
+
+<script>
+const TYPE_DESC = {
+  flat:   "Exact brute-force search. 100% accurate, no tuning, but slowest at 1.8M vectors. This is what you run now.",
+  ivfflat:"Partitions vectors into nlist clusters and searches the nprobe nearest ones. 5–10x faster than Flat, near-exact. Tune nprobe live for the accuracy/speed tradeoff.",
+  ivfpq:  "IVF clustering plus Product Quantization compression. Smallest on disk and fastest, but quantization loses some accuracy. Larger pq_m / nbits = more accurate but bigger.",
+  hnsw:   "Multi-layer proximity graph. Very fast queries and high accuracy, but uses a lot of RAM and builds slower. Tune efSearch live."
+};
+
+let liveInfo = {};
+
+async function loadStatus() {
+  const r = await fetch('/api/index-params');
+  const d = await r.json();
+  liveInfo = d.live || {};
+  document.getElementById('cur-type').textContent = liveInfo.index_type || '—';
+  document.getElementById('cur-metric').textContent = liveInfo.metric ? (liveInfo.metric === 'cosine' ? 'Cosine' : 'L2') : '—';
+  document.getElementById('cur-ntotal').textContent = liveInfo.ntotal ? liveInfo.ntotal.toLocaleString() : '—';
+  document.getElementById('cur-size').textContent = d.build && d.build.index_size_gb ? d.build.index_size_gb + ' GB' : '—';
+  document.getElementById('cur-acc').textContent = d.build && d.build.accuracy_vs_flat_pct != null ? d.build.accuracy_vs_flat_pct + '%' : '—';
+
+  // Show the right live slider for the current index type
+  const isIVF = (liveInfo.tunable||[]).includes('nprobe');
+  const isHNSW = (liveInfo.tunable||[]).includes('ef_search');
+  document.getElementById('nprobe-row').classList.toggle('hidden', !isIVF);
+  document.getElementById('ef-row').classList.toggle('hidden', !isHNSW);
+  let note = "";
+  if (isIVF) { document.getElementById('nprobe').value = liveInfo.nprobe || 50; document.getElementById('nprobe-val').textContent = liveInfo.nprobe || 50;
+    if (liveInfo.nlist) document.getElementById('nprobe').max = liveInfo.nlist; }
+  if (isHNSW) { document.getElementById('ef').value = liveInfo.ef_search || 64; document.getElementById('ef-val').textContent = liveInfo.ef_search || 64; }
+  if (!isIVF && !isHNSW) note = "This index type (" + (liveInfo.index_type||'?') + ") has no live tuning knobs — only k. Switch to IVFFlat or HNSW below to tune accuracy vs speed live.";
+  document.getElementById('tune-note').textContent = note;
+}
+
+// slider value labels
+function bindVal(id, valId) { const el=document.getElementById(id); const v=document.getElementById(valId);
+  el.addEventListener('input',()=>v.textContent=el.value); }
+['k:k-val','nprobe:nprobe-val','ef:ef-val','nlist:nlist-val','bnprobe:bnprobe-val',
+ 'pqm:pqm-val','pqbits:pqbits-val','hm:hm-val','hefc:hefc-val','hefs:hefs-val']
+ .forEach(p=>{const [a,b]=p.split(':');bindVal(a,b);});
+
+async function doSearch() {
+  const query = document.getElementById('q').value.trim();
+  if (!query) return;
+  const body = { query, k: parseInt(document.getElementById('k').value) };
+  if (!document.getElementById('nprobe-row').classList.contains('hidden')) body.nprobe = parseInt(document.getElementById('nprobe').value);
+  if (!document.getElementById('ef-row').classList.contains('hidden')) body.ef_search = parseInt(document.getElementById('ef').value);
+
+  const t0 = performance.now();
+  const r = await fetch('/api/search', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  const ms = (performance.now()-t0).toFixed(0);
+  const d = await r.json();
+  if (d.error) { alert(d.error); return; }
+
+  const lat = document.getElementById('latency');
+  lat.classList.remove('hidden');
+  lat.textContent = `⏱ ${ms} ms · ${d.results.length} results · index ${d.index_info ? d.index_info.index_type : ''}` +
+    (body.nprobe!=null ? ` · nprobe ${body.nprobe}` : '') + (body.ef_search!=null ? ` · efSearch ${body.ef_search}` : '');
+
+  const list = document.getElementById('results-list'); list.innerHTML='';
+  d.results.forEach(x=>{ const el=document.createElement('div'); el.className='result-item';
+    el.innerHTML = `<div class="rt">[${x.rank}] ${esc(x.title)}</div>
+      <div class="rm">${esc(x.file.split('/').pop())} · chunk ${x.chunk} · ${(x.similarity*100).toFixed(1)}% match</div>
+      <div class="rp">${esc(x.preview)}</div>`; list.appendChild(el); });
+}
+function esc(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
+
+document.getElementById('go').addEventListener('click', doSearch);
+document.getElementById('q').addEventListener('keypress', e=>{ if(e.key==='Enter') doSearch(); });
+// re-run search automatically when tuning sliders move (debounced)
+let deb; ['nprobe','ef','k'].forEach(id=>document.getElementById(id).addEventListener('input',()=>{
+  clearTimeout(deb); deb=setTimeout(()=>{ if(document.getElementById('q').value.trim()) doSearch(); }, 350); }));
+
+// Rebuild panel: show params per type
+function refreshType() {
+  const t = document.getElementById('itype').value;
+  document.getElementById('type-desc').textContent = TYPE_DESC[t];
+  document.querySelectorAll('.param-group').forEach(g=>{
+    g.classList.toggle('hidden', !g.dataset.for.split(' ').includes(t));
+  });
+}
+document.getElementById('itype').addEventListener('change', refreshType);
+
+document.getElementById('rebuild').addEventListener('click', async ()=>{
+  const t = document.getElementById('itype').value;
+  const opts = { index_type: t, metric: document.getElementById('metric').value };
+  if (t==='ivfflat'||t==='ivfpq') { opts.nlist=+document.getElementById('nlist').value; opts.nprobe=+document.getElementById('bnprobe').value; }
+  if (t==='ivfpq') { opts.pq_m=+document.getElementById('pqm').value; opts.pq_nbits=+document.getElementById('pqbits').value; }
+  if (t==='hnsw') { opts.hnsw_m=+document.getElementById('hm').value; opts.hnsw_efc=+document.getElementById('hefc').value; opts.hnsw_efs=+document.getElementById('hefs').value; }
+
+  if (!confirm(`Rebuild as ${t.toUpperCase()}? The current index is backed up first.`)) return;
+  const btn = document.getElementById('rebuild'); btn.disabled=true;
+  const r = await fetch('/api/rebuild-index',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(opts)});
+  const d = await r.json();
+  if (d.error) { alert(d.error); btn.disabled=false; return; }
+  document.getElementById('rebuild-progress').classList.remove('hidden');
+  pollProgress(btn);
+});
+
+async function pollProgress(btn) {
+  const r = await fetch('/api/indexing-status'); const s = await r.json();
+  document.getElementById('progress-fill').style.width = (s.progress||0)+'%';
+  document.getElementById('progress-msg').textContent = s.message||'';
+  if (s.indexing) { setTimeout(()=>pollProgress(btn), 800); }
+  else { btn.disabled=false; loadStatus(); }
+}
+
+// ---- Recall vs latency sweep ----
+let sweepChart = null;
+document.getElementById('sweep-btn').addEventListener('click', async ()=>{
+  const btn = document.getElementById('sweep-btn');
+  const status = document.getElementById('sweep-status');
+  btn.disabled = true; status.textContent = ' running sweep…';
+  // Use the typed query if present, else the server samples chunk previews.
+  const typed = document.getElementById('q').value.trim();
+  const body = { k: 10 };
+  if (typed) body.queries = [typed];
+  try {
+    const r = await fetch('/api/nprobe-sweep', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const d = await r.json();
+    if (d.error) { alert(d.error); return; }
+    if (!d.supported) { status.textContent = ` ${liveInfo.index_type} has no sweepable parameter — only IVF (nprobe) and HNSW (efSearch).`; return; }
+    renderSweep(d);
+    status.textContent = ` ${d.n_queries} queries · param: ${d.param}`;
+  } catch(e) { alert('Sweep failed: ' + e.message); }
+  finally { btn.disabled = false; }
+});
+
+function renderSweep(d) {
+  document.getElementById('sweep-wrap').classList.remove('hidden');
+  const labels = d.points.map(p=>p.x);
+  const recall = d.points.map(p=>p.recall);
+  const latency = d.points.map(p=>p.latency_ms);
+
+  // --- Efficiency elbow (Kneedle): the point of maximum recall gain relative
+  // to latency spent, i.e. where the curve stops paying off. Computed as the
+  // max vertical distance above the chord on the normalized recall-vs-latency
+  // curve. This beats "99% of max", which lands deep in the expensive tail. ---
+  const recMin = Math.min(...recall), recMax = Math.max(...recall);
+  const latMin = Math.min(...latency), latMax = Math.max(...latency);
+  const norm = (v, a, b) => (b > a ? (v - a) / (b - a) : 0);
+  let kneeIdx = 0, best = -Infinity;
+  d.points.forEach((p, i) => {
+    const dist = norm(p.recall, recMin, recMax) - norm(p.latency_ms, latMin, latMax);
+    if (dist > best) { best = dist; kneeIdx = i; }
+  });
+  const knee = d.points[kneeIdx];
+  // Near-exact option: smallest value reaching >=99% of the max recall.
+  let hiIdx = d.points.findIndex(p => p.recall >= recMax * 0.99);
+  if (hiIdx < 0) hiIdx = d.points.length - 1;
+  const hi = d.points[hiIdx];
+
+  const rec = document.getElementById('sweep-rec');
+  rec.classList.remove('warn');
+  const exactBit = (hiIdx > kneeIdx)
+    ? ` &nbsp;·&nbsp; Near-exact: <strong>${d.param} ${hi.x}</strong> → ${hi.recall}% at ${hi.latency_ms} ms.`
+    : '';
+  rec.innerHTML = `✓ Efficiency elbow: <strong>${d.param} = ${knee.x}</strong> → ${knee.recall}% recall at ${knee.latency_ms} ms/query ` +
+    `(best recall per ms — beyond here each extra ms buys little).${exactBit} ` +
+    `Bake one in by rebuilding with that ${d.param}` + (d.param === 'nprobe' && d.nlist ? ` (nlist ${d.nlist})` : '') + `.`;
+
+  // Mark the elbow (orange) and near-exact (green) points on the recall line.
+  const ptRadius = d.points.map((_, i) => (i === kneeIdx || i === hiIdx) ? 7 : 3);
+  const ptColor = d.points.map((_, i) => i === kneeIdx ? '#e65100' : (i === hiIdx ? '#1b5e20' : '#2e7d32'));
+
+  if (sweepChart) sweepChart.destroy();
+  const ctx = document.getElementById('sweep-chart').getContext('2d');
+  sweepChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets: [
+      { label: 'Recall %', data: recall, yAxisID: 'y', borderColor: '#2e7d32', backgroundColor:'#2e7d3222', tension:0.3, pointRadius:ptRadius, pointBackgroundColor:ptColor, fill:true },
+      { label: 'Latency ms/query', data: latency, yAxisID: 'y1', borderColor: '#1565c0', backgroundColor:'transparent', tension:0.3, pointRadius:4 }
+    ]},
+    options: {
+      responsive:true,
+      interaction:{ mode:'index', intersect:false },
+      plugins:{ legend:{ position:'top' },
+        annotation:false,
+        title:{ display:true, text:`Recall vs latency across ${d.param}` } },
+      scales:{
+        x:{ title:{ display:true, text:d.param + (d.param==='nprobe'&&d.nlist?` (of ${d.nlist} clusters)`:'') } },
+        y:{ type:'linear', position:'left', min:0, max:100, title:{ display:true, text:'Recall %' } },
+        y1:{ type:'linear', position:'right', min:0, title:{ display:true, text:'Latency ms/query' }, grid:{ drawOnChartArea:false } }
+      }
+    }
+  });
+}
+
+refreshType();
+loadStatus();
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+{% endblock %}

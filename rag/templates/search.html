@@ -1,0 +1,374 @@
+{% extends 'base.html' %}
+
+{% block title %}Search - Alexandria RAG{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Search Your Books</h1>
+    <p class="subtitle">Semantic search across your entire collection</p>
+</div>
+
+<!-- Search Interface -->
+<div class="search-container">
+    <div class="search-box">
+        <input
+            type="text"
+            id="search-input"
+            class="search-input"
+            placeholder="Ask a question... e.g., 'What does this collection say about machine learning?'"
+            autocomplete="off"
+        >
+        <button id="search-btn" class="btn btn-primary search-btn">
+            <span>🔍</span> Search
+        </button>
+    </div>
+
+    <div class="search-options">
+        <label>
+            Results to show:
+            <input type="number" id="results-count" min="1" max="20" value="5" style="width: 60px;">
+        </label>
+    </div>
+</div>
+
+<!-- Loading State -->
+<div id="search-loading" class="loading hidden">
+    <div class="spinner"></div>
+    <p>Searching your library...</p>
+</div>
+
+<!-- Results -->
+<div id="results-container" class="results-container hidden">
+    <div class="results-header">
+        <h2>Results for "<span id="results-query"></span>"</h2>
+        <p class="results-count"><span id="results-number">0</span> results found</p>
+    </div>
+
+    <div id="results-list" class="results-list">
+        <!-- Results will be inserted here -->
+    </div>
+</div>
+
+<!-- Empty State -->
+<div id="empty-state" class="empty-state">
+    <div class="empty-icon">🔍</div>
+    <h2>Start Searching</h2>
+    <p>Type a question above to search across all your books.</p>
+    <p class="empty-tip">💡 Tip: Ask natural language questions like "How do I implement machine learning?" or "What are the main themes?"</p>
+</div>
+
+<!-- No Index State -->
+<div id="no-index-state" class="empty-state hidden">
+    <div class="empty-icon">⚠️</div>
+    <h2>No Index Found</h2>
+    <p>You need to build an index first before you can search.</p>
+    <a href="/indexing" class="btn btn-primary">Build Index</a>
+</div>
+
+<style>
+.search-container {
+    margin-bottom: 2rem;
+}
+
+.search-box {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.search-input {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-family: inherit;
+    transition: border-color 0.2s;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: #2196F3;
+    box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+}
+
+.search-btn {
+    padding: 0.75rem 1.5rem;
+}
+
+.search-options {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.9rem;
+}
+
+.search-options label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.loading {
+    text-align: center;
+    padding: 2rem;
+}
+
+.loading.hidden {
+    display: none;
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #e0e0e0;
+    border-top-color: #2196F3;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 1rem;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.results-container {
+    margin-top: 2rem;
+}
+
+.results-container.hidden {
+    display: none;
+}
+
+.results-header {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #e0e0e0;
+}
+
+.results-header h2 {
+    margin-bottom: 0.5rem;
+}
+
+.results-count {
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.results-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.result-item {
+    padding: 1.25rem;
+    background: #f9f9f9;
+    border: 1px solid #e0e0e0;
+    border-left: 4px solid #2196F3;
+    border-radius: 6px;
+    transition: box-shadow 0.2s;
+}
+
+.result-item:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.result-rank {
+    display: inline-block;
+    background: #2196F3;
+    color: white;
+    width: 28px;
+    height: 28px;
+    line-height: 28px;
+    text-align: center;
+    border-radius: 50%;
+    font-weight: bold;
+    font-size: 0.9rem;
+    margin-right: 0.75rem;
+}
+
+.result-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.result-title {
+    flex: 1;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin: 0;
+}
+
+.result-metadata {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.85rem;
+    color: #666;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.metadata-item {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.similarity-badge {
+    display: inline-block;
+    background: #4CAF50;
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.result-preview {
+    padding: 0.75rem;
+    background: white;
+    border-left: 2px solid #ddd;
+    border-radius: 4px;
+    color: #333;
+    line-height: 1.5;
+    font-size: 0.95rem;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+}
+
+.empty-state.hidden {
+    display: none;
+}
+
+.empty-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.6;
+}
+
+.empty-state h2 {
+    margin-bottom: 0.5rem;
+    color: #666;
+}
+
+.empty-state p {
+    color: #999;
+    margin-bottom: 0.5rem;
+}
+
+.empty-tip {
+    font-style: italic;
+    color: #aaa;
+    margin-top: 1rem;
+}
+</style>
+
+<script>
+// Check if index exists on load
+async function checkIndex() {
+    const response = await fetch('/api/index-stats');
+    const stats = await response.json();
+
+    if (!stats.indexed) {
+        document.getElementById('no-index-state').classList.remove('hidden');
+        document.getElementById('search-input').disabled = true;
+        document.getElementById('search-btn').disabled = true;
+    }
+}
+
+// Search functionality
+async function performSearch() {
+    const query = document.getElementById('search-input').value.trim();
+    if (!query) return;
+
+    const k = parseInt(document.getElementById('results-count').value);
+
+    // Show loading
+    document.getElementById('search-loading').classList.remove('hidden');
+    document.getElementById('results-container').classList.add('hidden');
+    document.getElementById('empty-state').classList.add('hidden');
+
+    try {
+        const response = await fetch('/api/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query, k })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            alert('Error: ' + error.error);
+            document.getElementById('search-loading').classList.add('hidden');
+            return;
+        }
+
+        const data = await response.json();
+        displayResults(data);
+
+    } catch (error) {
+        alert('Search failed: ' + error.message);
+    } finally {
+        document.getElementById('search-loading').classList.add('hidden');
+    }
+}
+
+function displayResults(data) {
+    const resultsContainer = document.getElementById('results-list');
+    resultsContainer.innerHTML = '';
+
+    if (data.results.length === 0) {
+        document.getElementById('results-container').classList.remove('hidden');
+        document.getElementById('results-query').textContent = data.query;
+        document.getElementById('results-number').textContent = '0';
+        resultsContainer.innerHTML = '<p style="text-align: center; color: #999;">No results found. Try rephrasing your query.</p>';
+        return;
+    }
+
+    data.results.forEach(result => {
+        const item = document.createElement('div');
+        item.className = 'result-item';
+
+        const similarity = (result.similarity * 100).toFixed(1);
+
+        item.innerHTML = `
+            <div class="result-header">
+                <span class="result-rank">${result.rank}</span>
+                <h3 class="result-title">${escapeHtml(result.title)}</h3>
+            </div>
+            <div class="result-metadata">
+                <span class="metadata-item">📄 ${result.file.split('/').pop()}</span>
+                <span class="metadata-item">📍 Chunk ${result.chunk}</span>
+                <span class="similarity-badge">${similarity}% match</span>
+            </div>
+            <div class="result-preview">${escapeHtml(result.preview)}</div>
+        `;
+
+        resultsContainer.appendChild(item);
+    });
+
+    document.getElementById('results-container').classList.remove('hidden');
+    document.getElementById('results-query').textContent = data.query;
+    document.getElementById('results-number').textContent = data.results.length;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Event listeners
+document.getElementById('search-btn').addEventListener('click', performSearch);
+document.getElementById('search-input').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') performSearch();
+});
+
+// Check index on load
+checkIndex();
+</script>
+{% endblock %}

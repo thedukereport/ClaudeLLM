@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+
+{% block title %}Guide - Alexandria RAG{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Optimization Guide</h1>
+    <p class="subtitle">Recommendations for improving retrieval quality, ordered by payoff-to-effort.</p>
+</div>
+
+<div class="guide-summary">
+    <strong>System today:</strong> 3,595 books → 1.81M chunks · <code>all-MiniLM-L6-v2</code> (384-dim) ·
+    IVFFlat (nlist 1000, nprobe 50) · 2.8 GB index. The crash and speed are solved — this is about
+    getting the <em>right</em> passages back, plus housekeeping that makes future changes cheap.
+</div>
+
+<!-- TIER 1 -->
+<div class="tier">
+    <div class="tier-head"><span class="badge t1">Tier 1</span> Quick wins — hours, high impact</div>
+
+    <div class="rec done">
+        <h3>1. Cosine similarity (normalize + inner product) <span class="chip">Implemented</span></h3>
+        <p>MiniLM is trained for cosine, but the old index used un-normalized L2, letting vector
+        magnitude distort ranking. Embeddings are now L2-normalized and indexes built with inner
+        product, so scores are true cosine in [-1, 1]. Set <strong>Distance metric → Cosine</strong>
+        on the Tuning tab and rebuild to apply it to your current index (seconds, no re-embed).</p>
+    </div>
+
+    <div class="rec done">
+        <h3>2. Fix silent chunk truncation <span class="chip">Implemented</span></h3>
+        <p>Chunks were 256 <em>words</em>, but MiniLM's tokenizer caps at 256 <em>subword tokens</em>
+        (~1.3 per word), so the model dropped ~25% of every chunk before embedding. Chunk size is now
+        200 words to stay under the limit. Takes effect on the next full re-embed.</p>
+    </div>
+
+    <div class="rec">
+        <h3>3. Tune the IVF grid</h3>
+        <p>At 1.8M vectors the rule of thumb is <code>nlist ≈ 4·√N ≈ 5,400</code> — more, smaller
+        clusters hit the same recall while scanning fewer vectors. Rebuild with <strong>nlist 4096</strong>
+        on the Tuning tab, then drag <strong>nprobe</strong> to find the knee (likely 16–32 for ≥98%).</p>
+    </div>
+</div>
+
+<!-- TIER 2 -->
+<div class="tier">
+    <div class="tier-head"><span class="badge t2">Tier 2</span> Bigger quality levers — a day each</div>
+
+    <div class="rec">
+        <h3>4. Persist full chunk text <span class="chip warn">Gap</span></h3>
+        <p>Metadata stores only a 200-character preview; the full passage text isn't saved anywhere.
+        For a RAG that feeds an LLM, this is the critical gap — you can find a hit but can't hand the
+        model the full passage. Store full chunk text keyed by chunk id (SQLite or parquet). This also
+        unlocks reranking (#5).</p>
+    </div>
+
+    <div class="rec">
+        <h3>5. Add a cross-encoder reranker</h3>
+        <p>Retrieve top-50 from FAISS, then re-score with a cross-encoder that reads query + passage
+        together (<code>BAAI/bge-reranker-base</code>). Usually the largest precision jump in a RAG
+        pipeline. ~50–150 ms per query, only on candidates.</p>
+    </div>
+
+    <div class="rec">
+        <h3>6. Hybrid search (dense + BM25)</h3>
+        <p>Dense embeddings miss exact terms — proper nouns, titles, rare jargon. A book library is
+        full of those. Add SQLite <strong>FTS5</strong> (built in) or <code>rank_bm25</code> and fuse
+        with dense results via Reciprocal Rank Fusion.</p>
+    </div>
+
+    <div class="rec">
+        <h3>7. Move metadata out of an 851 MB JSON</h3>
+        <p>The whole metadata file loads into RAM on every startup, with linear-scan lookups. A SQLite
+        table keyed by chunk id gives O(1) lookups and low memory — the same store you'd use for #4 and #6.</p>
+    </div>
+</div>
+
+<!-- TIER 3 -->
+<div class="tier">
+    <div class="tier-head"><span class="badge t3">Tier 3</span> Bigger bets — if quality still matters</div>
+
+    <div class="rec">
+        <h3>8. Upgrade the embedding model</h3>
+        <p>At the <em>same</em> 384 dims (index size unchanged), <code>BAAI/bge-small-en-v1.5</code> and
+        <code>thenlper/gte-small</code> rank well above MiniLM on MTEB. <code>bge-base-en-v1.5</code>
+        (768d) is better still but doubles size. bge/e5 need a query prefix. Cost: a full re-embed —
+        cheap if you've done #9.</p>
+    </div>
+
+    <div class="rec">
+        <h3>9. Cache extracted text</h3>
+        <p>PDF extraction is the 13-hour bottleneck; embedding is only ~40 min. Nothing currently
+        persists extracted text, so every model or chunking experiment re-pays the 13 hours. Cache it
+        once and re-embedding becomes a 40-minute job. This is what makes everything else iterable.</p>
+    </div>
+
+    <div class="rec">
+        <h3>10. Incremental indexing</h3>
+        <p>Adding one book currently means a full rebuild. Use <code>IndexIDMap</code> + <code>add_with_ids</code>
+        with a manifest of indexed files, so new books append and removed books get filtered.</p>
+    </div>
+
+    <div class="rec">
+        <h3>11. Memory-map the index</h3>
+        <p>2.8 GB loads fully into RAM at startup. <code>faiss.read_index(path, faiss.IO_FLAG_MMAP)</code>
+        maps it instead — lighter footprint on a laptop, negligible speed cost for IVFFlat.</p>
+    </div>
+</div>
+
+<!-- META -->
+<div class="tier meta">
+    <div class="tier-head"><span class="badge tm">Measure</span> The meta-recommendation</div>
+    <div class="rec">
+        <p>You can't optimize what you don't measure, and "98.6% recall" is recall against <em>Flat</em>,
+        not against the <em>right answer</em>. Build a small gold set — 30–50 real questions, each tagged
+        with the passage that should win — and script <code>recall@k</code> and <code>MRR</code>. Then
+        every change becomes a number, not a guess.</p>
+        <p class="order"><strong>Suggested order:</strong> #1 + #2 (done) → build the eval set → #9
+        (unlocks iteration) → #4 + #7 + #5 (the RAG-quality core) → re-measure → decide on #8.</p>
+    </div>
+</div>
+
+<style>
+.guide-summary { background:#eef6ff; border:1px solid #cfe3f7; border-radius:10px; padding:1rem 1.25rem;
+  margin-bottom:1.5rem; font-size:0.92rem; line-height:1.5; color:#234; }
+.guide-summary code, .rec code { background:#eef1f4; padding:0.05rem 0.35rem; border-radius:4px; font-size:0.86em; }
+.tier { margin-bottom:1.75rem; }
+.tier-head { font-size:1.05rem; font-weight:700; margin-bottom:0.85rem; display:flex; align-items:center; gap:0.6rem; }
+.badge { color:#fff; font-size:0.7rem; font-weight:700; letter-spacing:0.04em; padding:0.18rem 0.55rem;
+  border-radius:20px; text-transform:uppercase; }
+.badge.t1 { background:#2e7d32; } .badge.t2 { background:#1565c0; } .badge.t3 { background:#6a1b9a; }
+.badge.tm { background:#b26a00; }
+.rec { background:#fff; border:1px solid #e0e0e0; border-left:4px solid #2196F3; border-radius:8px;
+  padding:1rem 1.1rem; margin-bottom:0.85rem; }
+.rec.done { border-left-color:#4CAF50; }
+.rec h3 { font-size:0.98rem; margin-bottom:0.4rem; display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap; }
+.rec p { font-size:0.9rem; color:#333; line-height:1.55; margin-bottom:0.4rem; }
+.rec p:last-child { margin-bottom:0; }
+.chip { font-size:0.68rem; font-weight:700; background:#e8f5e9; color:#2e7d32; padding:0.12rem 0.5rem; border-radius:20px; }
+.chip.warn { background:#fff3e0; color:#b26a00; }
+.meta .rec { border-left-color:#b26a00; }
+.order { margin-top:0.6rem; padding-top:0.6rem; border-top:1px dashed #e0e0e0; }
+</style>
+{% endblock %}

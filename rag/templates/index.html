@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - Alexandria RAG{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Dashboard</h1>
+    <p class="subtitle">Your Alexandria RAG System Overview</p>
+</div>
+
+<div class="stats-grid">
+    <!-- Index Status -->
+    <div class="stat-card">
+        <div class="stat-icon">📇</div>
+        <div class="stat-content">
+            <h3>Index Status</h3>
+            <p class="stat-value" id="index-status">
+                {% if stats.indexed %}Ready{% else %}Not Built{% endif %}
+            </p>
+            <p class="stat-detail">
+                {% if stats.indexed %}
+                    Built {{ stats.created_at|default('recently') }}
+                {% else %}
+                    <a href="/indexing">Build Index</a>
+                {% endif %}
+            </p>
+        </div>
+    </div>
+
+    <!-- Books Count -->
+    <div class="stat-card">
+        <div class="stat-icon">📚</div>
+        <div class="stat-content">
+            <h3>Books Indexed</h3>
+            <p class="stat-value">{{ stats.books }}</p>
+            <p class="stat-detail">in your collection</p>
+        </div>
+    </div>
+
+    <!-- Chunks -->
+    <div class="stat-card">
+        <div class="stat-icon">📑</div>
+        <div class="stat-content">
+            <h3>Text Chunks</h3>
+            <p class="stat-value">{{ "{:,}".format(stats.chunks) }}</p>
+            <p class="stat-detail">searchable passages</p>
+        </div>
+    </div>
+
+    <!-- Index Size -->
+    <div class="stat-card">
+        <div class="stat-icon">💾</div>
+        <div class="stat-content">
+            <h3>Index Size</h3>
+            <p class="stat-value">{{ stats.index_size_mb }} MB</p>
+            <p class="stat-detail">
+                {% if stats.indexed %}
+                    {{ stats.index_size_mb + stats.metadata_size_mb }} MB total
+                {% else %}
+                    no data yet
+                {% endif %}
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="quick-actions">
+    <h2>Quick Start</h2>
+    <div class="action-buttons">
+        <a href="/search" class="btn btn-primary">
+            <span>🔍</span> Search Your Books
+        </a>
+        <a href="/indexing" class="btn btn-secondary">
+            <span>⚙️</span> Build or Update Index
+        </a>
+        <a href="/books" class="btn btn-secondary">
+            <span>📚</span> Browse Books
+        </a>
+    </div>
+</div>
+
+<!-- Features -->
+<div class="features-section">
+    <h2>How It Works</h2>
+    <div class="features-grid">
+        <div class="feature">
+            <div class="feature-icon">🔍</div>
+            <h3>Semantic Search</h3>
+            <p>Ask questions in natural language. Find relevant passages by meaning, not just keywords.</p>
+        </div>
+        <div class="feature">
+            <div class="feature-icon">⚡</div>
+            <h3>Fast & Local</h3>
+            <p>Everything runs on your computer. No cloud, no privacy concerns. GPU-accelerated when available.</p>
+        </div>
+        <div class="feature">
+            <div class="feature-icon">📖</div>
+            <h3>Full Context</h3>
+            <p>Results show the source book, exact passage, and relevance score. Know exactly where information comes from.</p>
+        </div>
+        <div class="feature">
+            <div class="feature-icon">🔧</div>
+            <h3>Easy Management</h3>
+            <p>Build, update, or clear your index from this interface. No command line needed.</p>
+        </div>
+    </div>
+</div>
+
+<script>
+// Refresh stats periodically
+setInterval(() => {
+    fetch('/api/index-stats')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('index-status').textContent =
+                data.indexed ? 'Ready' : 'Not Built';
+        });
+}, 30000);
+</script>
+{% endblock %}

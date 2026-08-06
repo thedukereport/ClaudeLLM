@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+
+    <!-- Identity -->
+    <key>Label</key>
+    <string>com.dukemedia.rrdash</string>
+
+    <!-- What to run.  /usr/bin/python3 is Apple's system Python; reliable on
+         any modern macOS (Xcode CLT installs it).  If you prefer Homebrew's
+         Python, change to /opt/homebrew/bin/python3 (Apple Silicon) or
+         /usr/local/bin/python3 (Intel). -->
+    <key>WorkingDirectory</key>
+    <string>/Users/peterduke/Documents/Reframing Reality Vault</string>
+
+    <!-- Force the arm64 slice. /usr/bin/python3 is universal2; when this agent
+         (or the app it launches) ends up running the Intel slice under Rosetta,
+         every child it spawns — the `servers` wrapper, rag_env/bin/python — also
+         runs x86 and then cannot load the arm64 torch/faiss wheels (rag-ui
+         crash-looped on exactly this). `arch -arm64` pins the native slice. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/arch</string>
+        <string>-arm64</string>
+        <string>/usr/bin/python3</string>
+        <string>dashboard.py</string>
+    </array>
+
+    <!-- Shell PATH the dashboard inherits.  Needed so subprocess calls inside
+         the Local Servers panel (lsof, bash, tail) work even though
+         LaunchAgents run with a minimal default PATH. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <!-- Start at login. -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Restart on crash, but NOT on intentional exit (so launchctl unload
+         and Ctrl-C actually stop it). -->
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+        <key>Crashed</key>
+        <true/>
+    </dict>
+
+    <!-- Log to the same place as `servers tail rr-dash`. -->
+    <key>StandardOutPath</key>
+    <string>/Users/peterduke/Library/Logs/RR/rr-dash.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/peterduke/Library/Logs/RR/rr-dash.log</string>
+
+    <!-- Low-priority background process so it doesn't compete with editor work. -->
+    <key>ProcessType</key>
+    <string>Background</string>
+
+</dict>
+</plist>

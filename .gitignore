@@ -1,0 +1,45 @@
+# ─── Never commit data or environments — the builders regenerate them locally ───
+
+# Python environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+rag_env/
+mcp_env/
+
+# Built corpora / indexes / models (large; each user builds their own)
+*.sqlite
+*.sqlite3
+*.db
+*.npy
+*.index
+*.index.*.backup
+*.faiss
+*.zim
+*.jsonl
+alexandria_metadata.json
+alexandria_manifest.json
+index_params.json
+
+# Download caches / cloned source data
+lat.ls*.xml
+ethiopian-bible/
+idp.data/
+sources/
+sources_lex/
+text_cache/
+downloads/
+PDF/
+
+# Per-corpus source text that isn't ours to redistribute (fetch locally)
+Greek-resources/*/
+Latin-resources/*/
+Perseus-canonical/canonical-*/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*.log
+rag_config.json

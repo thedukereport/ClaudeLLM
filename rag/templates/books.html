@@ -1,0 +1,207 @@
+{% extends 'base.html' %}
+
+{% block title %}Books - Alexandria RAG{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Indexed Books</h1>
+    <p class="subtitle">Browse your book collection</p>
+</div>
+
+<div class="books-container">
+    <div class="search-filter">
+        <input
+            type="text"
+            id="filter-input"
+            class="filter-input"
+            placeholder="Filter books..."
+        >
+    </div>
+
+    <div id="books-info" class="books-info">
+        Total: <span id="books-total">0</span> books
+    </div>
+
+    <div id="books-grid" class="books-grid">
+        <!-- Books will be loaded here -->
+    </div>
+
+    <div id="loading" class="loading-state">
+        <p>Loading books...</p>
+    </div>
+
+    <div id="no-books" class="empty-state hidden">
+        <div class="empty-icon">📚</div>
+        <h2>No Books Indexed</h2>
+        <p>Build an index first to see your books here.</p>
+        <a href="/indexing" class="btn btn-primary">Build Index</a>
+    </div>
+</div>
+
+<style>
+.books-container {
+    max-width: 1200px;
+}
+
+.search-filter {
+    margin-bottom: 1.5rem;
+}
+
+.filter-input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-family: inherit;
+}
+
+.filter-input:focus {
+    outline: none;
+    border-color: #2196F3;
+    box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+}
+
+.books-info {
+    color: #666;
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+}
+
+.books-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.book-card {
+    background: white;
+    padding: 1.25rem;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.book-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-color: #2196F3;
+    transform: translateY(-2px);
+}
+
+.book-icon {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.book-title {
+    font-weight: 600;
+    color: #1a1a1a;
+    margin-bottom: 0.5rem;
+    word-break: break-word;
+}
+
+.book-stats {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.85rem;
+    color: #666;
+}
+
+.book-stat {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.loading-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #999;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+}
+
+.empty-state.hidden {
+    display: none;
+}
+
+.empty-icon {
+    font-size: 3rem;
+    opacity: 0.6;
+    margin-bottom: 1rem;
+}
+</style>
+
+<script>
+let allBooks = [];
+
+async function loadBooks() {
+    try {
+        const response = await fetch('/api/books');
+        const data = await response.json();
+
+        if (data.books && data.books.length > 0) {
+            allBooks = data.books;
+            displayBooks(allBooks);
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('books-grid').style.display = 'grid';
+            document.getElementById('no-books').classList.add('hidden');
+        } else {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('books-grid').style.display = 'none';
+            document.getElementById('no-books').classList.remove('hidden');
+        }
+    } catch (error) {
+        document.getElementById('loading').innerHTML = '<p style="color: #f44336;">Error loading books</p>';
+    }
+}
+
+function displayBooks(books) {
+    const grid = document.getElementById('books-grid');
+    const total = document.getElementById('books-total');
+    grid.innerHTML = '';
+    total.textContent = books.length;
+
+    books.forEach(book => {
+        const card = document.createElement('div');
+        card.className = 'book-card';
+
+        const fileName = book.file.split('/').pop();
+
+        card.innerHTML = `
+            <div class="book-icon">📖</div>
+            <div class="book-title">${escapeHtml(book.title)}</div>
+            <div class="book-stats">
+                <div class="book-stat">📄 ${fileName}</div>
+                <div class="book-stat">📑 ${book.chunks} chunks</div>
+            </div>
+        `;
+
+        grid.appendChild(card);
+    });
+}
+
+function filterBooks() {
+    const query = document.getElementById('filter-input').value.toLowerCase();
+    const filtered = allBooks.filter(book =>
+        book.title.toLowerCase().includes(query) ||
+        book.file.toLowerCase().includes(query)
+    );
+    displayBooks(filtered);
+}
+
+document.getElementById('filter-input').addEventListener('input', filterBooks);
+
+// Load books on page load
+loadBooks();
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+{% endblock %}

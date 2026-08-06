@@ -1,0 +1,508 @@
+#!/bin/bash
+# servers — start/stop/status for the local Reframing Reality services.
+#
+# Usage:
+#   ./servers status                    # show all services
+#   ./servers status <name>             # show one
+#   ./servers start <name>              # launch in background
+#   ./servers stop <name>               # kill via PID file
+#   ./servers restart <name>            # stop then start
+#   ./servers tail <name> [N]           # tail last N lines of the log (default 50)
+#
+# Services: rag-ui  rag-mcp  greek-mcp  latin-mcp  perseus-mcp  wikispooks-mcp  pleiades-mcp  wikipedia-mcp  scriptures-mcp  gutenberg-mcp  papyri-mcp  rr-dash
+#
+# PID files: /tmp/rr-<name>.pid
+# Log files: ~/Library/Logs/RR/<name>.log
+
+set -e
+
+# ─────────────────────────────────────────────────────────────────────
+# Configuration
+# ─────────────────────────────────────────────────────────────────────
+
+VAULT="/Users/peterduke/Documents/Reframing Reality Vault"
+ALEXANDRIA_WORKING="/Users/peterduke/Documents/Claude/Projects/Alexandria RAG"
+ALEXANDRIA_PROBLADE="/Volumes/PRO-BLADE/Alexandria/RAG_system"
+LOG_DIR="${HOME}/Library/Logs/RR"
+PID_DIR="/tmp"
+
+mkdir -p "$LOG_DIR"
+
+# Service registry. Each service has:
+#   port      — TCP port (or "stdio" for non-port servers, or "" for none)
+#   workdir   — directory to cd into before running the command
+#   cmd       — command line to launch the service
+#   needs     — space-separated dependencies (problade / network / etc.)
+#   note      — short human description
+#
+# rr-dash is treated specially — status only, no Start/Stop from this wrapper
+# (you don't want the dashboard killing itself from inside a request handler).
+#
+# rag-mcp is also status-only — Claude Desktop / Cowork launches it via its MCP
+# config; running it standalone from a shell is rarely useful.
+
+# rag-ui moved 5000 → 5050 on 2026-07-02: macOS AirPlay Receiver squats on 5000.
+svc_port()    { case "$1" in rag-ui) echo 5050;; rag-mcp) echo stdio;; greek-mcp) echo stdio;; latin-mcp) echo stdio;; perseus-mcp) echo stdio;; wikispooks-mcp) echo stdio;; pleiades-mcp) echo stdio;; wikipedia-mcp) echo stdio;; scriptures-mcp) echo stdio;; gutenberg-mcp) echo stdio;; papyri-mcp) echo stdio;; rr-dash) echo 8765;; esac; }
+svc_workdir() { case "$1" in
+    # rag-ui MUST run from PRO-BLADE — the Documents "Alexandria RAG" copy is a
+    # stale April 2026 snapshot (no health check, no incremental indexing).
+    # Repointed 2026-07-02 after the wrapper started the stale copy.
+    rag-ui)         echo "$ALEXANDRIA_PROBLADE";;
+    rag-mcp)        echo "$ALEXANDRIA_PROBLADE";;
+    greek-mcp)      echo "/Volumes/PRO-BLADE/Alexandria/Greek-resources";;
+    latin-mcp)      echo "/Volumes/PRO-BLADE/Alexandria/Latin-resources";;
+    perseus-mcp)    echo "/Volumes/PRO-BLADE/Alexandria/Perseus-canonical";;
+    wikispooks-mcp) echo "/Volumes/PRO-BLADE/WikiSpooks";;
+    pleiades-mcp)   echo "/Volumes/PRO-BLADE/Pleiades";;
+    wikipedia-mcp)  echo "/Volumes/PRO-BLADE/Wikipedia";;
+    scriptures-mcp) echo "/Volumes/PRO-BLADE/Scriptures";;
+    gutenberg-mcp)  echo "/Volumes/PRO-BLADE/Gutenberg";;
+    papyri-mcp)     echo "/Volumes/PRO-BLADE/Alexandria/Papyri";;
+    rr-dash)        echo "$VAULT";;
+esac; }
+svc_cmd() { case "$1" in
+    # rag-ui uses the venv's python directly (equivalent to 'source
+    # rag_env/bin/activate' first) — system python3 lacks flask/faiss.
+    rag-ui)         echo "arch -arm64 rag_env/bin/python app.py";;
+    rag-mcp)        echo "bash run_mcp.sh";;
+    # MCP servers are status-only here — Claude Desktop launches them from its
+    # mcpServers config; these commands are for reference only.
+    greek-mcp)      echo "arch -arm64 rag_env/bin/python greek_mcp_server.py";;
+    latin-mcp)      echo "arch -arm64 rag_env/bin/python latin_mcp_server.py";;
+    perseus-mcp)    echo "arch -arm64 rag_env/bin/python perseus_mcp_server.py";;
+    wikispooks-mcp) echo "arch -arm64 rag_env/bin/python wikispooks_mcp_server.py";;
+    pleiades-mcp)   echo "arch -arm64 rag_env/bin/python pleiades_mcp_server.py";;
+    wikipedia-mcp)  echo "arch -arm64 rag_env/bin/python wikipedia_mcp_server.py";;
+    scriptures-mcp) echo "arch -arm64 rag_env/bin/python scriptures_mcp_server.py";;
+    gutenberg-mcp)  echo "arch -arm64 rag_env/bin/python gutenberg_mcp_server.py";;
+    papyri-mcp)     echo "arch -arm64 rag_env/bin/python papyri_mcp_server.py";;
+    rr-dash)        echo "arch -arm64 python3 dashboard.py";;
+esac; }
+svc_needs() { case "$1" in
+    rag-ui)         echo "problade";;
+    rag-mcp)        echo "problade";;
+    greek-mcp)      echo "problade";;
+    latin-mcp)      echo "problade";;
+    perseus-mcp)    echo "problade";;
+    wikispooks-mcp) echo "problade";;
+    pleiades-mcp)   echo "problade";;
+    wikipedia-mcp)  echo "problade";;
+    scriptures-mcp) echo "problade";;
+    gutenberg-mcp)  echo "problade";;
+    papyri-mcp)    echo "problade";;
+    rr-dash)        echo "";;
+esac; }
+svc_note() { case "$1" in
+    rag-ui)         echo "Alexandria RAG Web UI";;
+    rag-mcp)        echo "Alexandria RAG — MCP (managed by Claude Desktop/Cowork)";;
+    greek-mcp)      echo "Greek Resources — MCP (managed by Claude Desktop/Cowork)";;
+    latin-mcp)      echo "Latin Resources — MCP (managed by Claude Desktop/Cowork)";;
+    perseus-mcp)    echo "Perseus canonical library — MCP (managed by Claude Desktop/Cowork)";;
+    wikispooks-mcp) echo "WikiSpooks — MCP, full wiki ~37.7k articles (managed by Claude Desktop/Cowork)";;
+    pleiades-mcp)   echo "Pleiades — MCP, ancient places (managed by Claude Desktop/Cowork)";;
+    wikipedia-mcp)  echo "Wikipedia — MCP, offline Kiwix ZIM (managed by Claude Desktop/Cowork)";;
+    scriptures-mcp) echo "Scriptures — MCP, Qur'an/Enoch/Tanakh/Talmud/Mishnah + Ethiopian canon (managed by Claude Desktop/Cowork)";;
+    gutenberg-mcp)  echo "Project Gutenberg — MCP, public-domain books by subject (managed by Claude Desktop/Cowork)";;
+    papyri-mcp)     echo "Papyri (DDbDP) — MCP, ~67.6k documentary papyri, CC BY (managed by Claude Desktop/Cowork)";;
+    rr-dash)        echo "This dashboard (status only — won't kill itself)";;
+esac; }
+
+# Services that this wrapper will start/stop. Status-only: rr-dash and all MCP
+# servers (rag-mcp / greek-mcp / wikispooks-mcp / pleiades-mcp are launched by
+# Claude Desktop over stdio, not from this wrapper).
+CONTROLLABLE="rag-ui"
+ALL_SERVICES="rag-ui rag-mcp greek-mcp latin-mcp perseus-mcp wikispooks-mcp pleiades-mcp wikipedia-mcp scriptures-mcp gutenberg-mcp papyri-mcp rr-dash"
+
+# ─────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────
+
+pid_file() { echo "${PID_DIR}/rr-$1.pid"; }
+log_file() { echo "${LOG_DIR}/$1.log"; }
+
+is_known() {
+    for s in $ALL_SERVICES; do [ "$s" = "$1" ] && return 0; done
+    return 1
+}
+
+is_controllable() {
+    for s in $CONTROLLABLE; do [ "$s" = "$1" ] && return 0; done
+    return 1
+}
+
+# Print the PID(s) LISTENING on a TCP port (empty if none).
+# -sTCP:LISTEN is load-bearing: without it, lsof also returns CLIENT
+# connections to the port — e.g. a browser tab polling the dashboard —
+# and the wrapper then mistakes (or kills!) the browser for the service.
+port_pid() {
+    local port="$1"
+    [ -z "$port" ] || [ "$port" = "stdio" ] && return
+    lsof -ti tcp:"$port" -sTCP:LISTEN 2>/dev/null || true
+}
+
+# Print "PID COMMAND" lines for whatever holds a port — used to tell OUR
+# service apart from squatters (macOS AirPlay Receiver / ControlCenter
+# listens on port 5000 and launchd respawns it instantly when killed).
+port_owner() {
+    local port="$1"
+    [ -z "$port" ] || [ "$port" = "stdio" ] && return
+    # LISTENERS only (same -sTCP:LISTEN rule as port_pid): without it,
+    # browser tabs connected to the port show up as the "owner".
+    local pids; pids=$(lsof -ti tcp:"$port" -sTCP:LISTEN 2>/dev/null || true)
+    [ -n "$pids" ] && ps -p $(echo $pids | tr ' \n' ',,' | sed 's/,$//') -o pid=,comm= 2>/dev/null || true
+}
+
+# Return 0 if the port is held by a process that is NOT ours (not python/bash).
+port_foreign() {
+    local port="$1"
+    local owner; owner=$(port_owner "$port")
+    [ -z "$owner" ] && return 1
+    echo "$owner" | grep -qiv "python\|bash" && return 0
+    return 1
+}
+
+# Return 0 if PID file exists and that process is alive.
+pid_alive() {
+    local pf="$1"
+    [ -f "$pf" ] || return 1
+    local pid; pid=$(cat "$pf" 2>/dev/null || true)
+    [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
+
+# Return "running"/"stopped" for a service. For port-based services, prefer the
+# port check (more authoritative than the PID file).
+svc_state() {
+    local name="$1"
+    local port; port=$(svc_port "$name")
+    if [ -n "$port" ] && [ "$port" != "stdio" ]; then
+        if [ -n "$(port_pid "$port")" ]; then
+            echo running
+            return
+        fi
+    fi
+    if pid_alive "$(pid_file "$name")"; then
+        echo running
+        return
+    fi
+    # stdio MCP servers are launched on demand by Claude Desktop, not tracked by
+    # a PID file — report "on-demand" (matches the dashboard), not "stopped".
+    [ "$port" = "stdio" ] && { echo on-demand; return; }
+    echo stopped
+}
+
+# Return the PID of a running service (port pid first, then PID file).
+svc_pid() {
+    local name="$1"
+    local port; port=$(svc_port "$name")
+    if [ -n "$port" ] && [ "$port" != "stdio" ]; then
+        local p; p=$(port_pid "$port")
+        [ -n "$p" ] && { echo "$p"; return; }
+    fi
+    local pf; pf=$(pid_file "$name")
+    [ -f "$pf" ] && cat "$pf" 2>/dev/null || true
+}
+
+# Color helpers — only emit when stdout is a TTY.
+if [ -t 1 ]; then
+    BOLD=$'\033[1m'; DIM=$'\033[2m'; OFF=$'\033[0m'
+    GREEN=$'\033[32m'; RED=$'\033[31m'; YELLOW=$'\033[33m'; CYAN=$'\033[36m'
+else
+    BOLD=""; DIM=""; OFF=""; GREEN=""; RED=""; YELLOW=""; CYAN=""
+fi
+
+problade_mounted() {
+    [ -d "/Volumes/PRO-BLADE/Alexandria" ]
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# Subcommands
+# ─────────────────────────────────────────────────────────────────────
+
+cmd_status() {
+    local target="${1:-}"
+
+    if problade_mounted; then
+        printf "${BOLD}PRO-BLADE:${OFF} ${GREEN}mounted${OFF}  ${DIM}(Alexandria available)${OFF}\n"
+    else
+        printf "${BOLD}PRO-BLADE:${OFF} ${RED}NOT MOUNTED${OFF}  ${DIM}(Alexandria + MCP server unreachable)${OFF}\n"
+    fi
+    echo
+
+    printf "${BOLD}%-12s %-9s %-7s %-8s %s${OFF}\n" "NAME" "STATE" "PORT" "PID" "NOTE"
+    for s in $ALL_SERVICES; do
+        [ -n "$target" ] && [ "$target" != "$s" ] && continue
+        local state; state=$(svc_state "$s")
+        local port; port=$(svc_port "$s")
+        local pid;  pid=$(svc_pid "$s")
+        local note; note=$(svc_note "$s")
+        local state_colored
+        case "$state" in
+            running) state_colored="${GREEN}running${OFF}";;
+            stopped) state_colored="${YELLOW}stopped${OFF}";;
+            *)       state_colored="$state";;
+        esac
+        printf "%-12s %-18s %-7s %-8s %s\n" "$s" "$state_colored" "${port:--}" "${pid:--}" "$note"
+    done
+}
+
+cmd_start() {
+    local name="$1"
+    [ -z "$name" ] && { echo "Usage: $0 start <name>" >&2; exit 2; }
+    is_known "$name" || { echo "Unknown service: $name" >&2; exit 2; }
+    is_controllable "$name" || {
+        echo "Service '$name' is not start/stop-controlled from this wrapper." >&2
+        echo "  rr-dash  — start with 'bash start-RRDash.sh' or 'python3 dashboard.py'" >&2
+        echo "  rag-mcp  — managed by Claude Desktop / Cowork via the MCP config" >&2
+        exit 2
+    }
+
+    local needs; needs=$(svc_needs "$name")
+    if [ "$needs" = "problade" ] && ! problade_mounted; then
+        echo "Cannot start $name: PRO-BLADE is not mounted." >&2
+        exit 1
+    fi
+
+    local port; port=$(svc_port "$name")
+    if [ -n "$port" ] && [ "$port" != "stdio" ] && port_foreign "$port"; then
+        printf "${RED}Port $port is held by another program, not $name:${OFF}\n"
+        port_owner "$port" | sed 's/^/    /'
+        echo "If this is ControlCenter, that's macOS AirPlay Receiver squatting on the port."
+        echo "Turn it off: System Settings → General → AirDrop & Handoff → AirPlay Receiver."
+        exit 1
+    fi
+
+    if [ "$(svc_state "$name")" = "running" ]; then
+        echo "$name already running:"
+        port_owner "$port" | sed 's/^/    /'
+        return 0
+    fi
+
+    local workdir; workdir=$(svc_workdir "$name")
+    local cmd;     cmd=$(svc_cmd "$name")
+    local log;     log=$(log_file "$name")
+    local pf;      pf=$(pid_file "$name")
+
+    [ -d "$workdir" ] || { echo "Workdir missing: $workdir" >&2; exit 1; }
+
+    echo "Starting $name..."
+    echo "  workdir: $workdir"
+    echo "  cmd:     $cmd"
+    echo "  log:     $log"
+
+    # Launch in background, fully detached, append stdout+stderr to the log.
+    # The "nohup" + "&" combo + redirect of stdin keeps the process alive
+    # after this shell exits.
+    (
+        cd "$workdir"
+        echo "" >> "$log"
+        echo "===== $(date '+%Y-%m-%d %H:%M:%S') — $name starting =====" >> "$log"
+        nohup bash -c "$cmd" >> "$log" 2>&1 < /dev/null &
+        echo $! > "$pf"
+    )
+
+    # Brief settle time so port-bind succeeds before we report status.
+    sleep 1
+    local state; state=$(svc_state "$name")
+    if [ "$state" = "running" ]; then
+        printf "  ${GREEN}started${OFF}  PID $(svc_pid "$name")\n"
+    else
+        printf "  ${RED}failed to start${OFF} — check the log:\n"
+        printf "      tail $log\n"
+        exit 1
+    fi
+}
+
+cmd_stop() {
+    local name="$1"
+    [ -z "$name" ] && { echo "Usage: $0 stop <name>" >&2; exit 2; }
+    is_known "$name" || { echo "Unknown service: $name" >&2; exit 2; }
+    is_controllable "$name" || {
+        echo "Service '$name' is not start/stop-controlled from this wrapper." >&2
+        exit 2
+    }
+
+    local state; state=$(svc_state "$name")
+    if [ "$state" != "running" ]; then
+        echo "$name is not running."
+        rm -f "$(pid_file "$name")"
+        return 0
+    fi
+
+    # svc_pid can return SEVERAL PIDs (Flask's debug reloader forks a child;
+    # lsof lists every process on the port). Handle them as a list, always.
+    local pids; pids=$(svc_pid "$name" | tr '\n' ' ')
+    echo "Stopping $name (PID(s): $pids)..."
+
+    # Try graceful first, then escalate if needed.
+    local p
+    for p in $pids; do kill "$p" 2>/dev/null || true; done
+    for i in 1 2 3 4 5; do
+        local alive=""
+        for p in $pids; do kill -0 "$p" 2>/dev/null && alive="$alive$p "; done
+        [ -z "$alive" ] && break
+        sleep 0.5
+    done
+    for p in $pids; do
+        if kill -0 "$p" 2>/dev/null; then
+            echo "  $p still alive after SIGTERM, sending SIGKILL..."
+            kill -9 "$p" 2>/dev/null || true
+        fi
+    done
+
+    # Clean up anything still bound to the port (children that out-survived
+    # the parent), and WAIT until the port is actually free — otherwise a
+    # following 'start' sees the port held and reports "already running".
+    # Foreign processes (e.g. macOS AirPlay Receiver) are reported, NOT killed
+    # — launchd respawns them instantly, so killing them is a losing game.
+    local port; port=$(svc_port "$name")
+    if [ -n "$port" ] && [ "$port" != "stdio" ]; then
+        for i in 1 2 3 4 5 6; do
+            if port_foreign "$port"; then
+                printf "  ${RED}NOTE: port $port is held by another program (not $name):${OFF}\n"
+                port_owner "$port" | sed 's/^/      /'
+                echo "  If this is ControlCenter: System Settings → General → AirDrop & Handoff → turn off AirPlay Receiver."
+                break
+            fi
+            local stray; stray=$(port_pid "$port" | tr '\n' ' ')
+            [ -z "${stray// /}" ] && break
+            echo "  killing stray port-holder(s): $stray"
+            kill -9 $stray 2>/dev/null || true
+            sleep 0.5
+        done
+    fi
+
+    rm -f "$(pid_file "$name")"
+    printf "  ${GREEN}stopped${OFF}\n"
+}
+
+cmd_restart() {
+    cmd_stop "$1" || true
+    sleep 1
+    cmd_start "$1"
+}
+
+cmd_tail() {
+    local name="$1"
+    local n="${2:-50}"
+    [ -z "$name" ] && { echo "Usage: $0 tail <name> [lines]" >&2; exit 2; }
+    is_known "$name" || { echo "Unknown service: $name" >&2; exit 2; }
+    local log; log=$(log_file "$name")
+    if [ ! -f "$log" ]; then
+        echo "No log yet for $name ($log)"
+        exit 0
+    fi
+    tail -n "$n" "$log"
+}
+
+cmd_help() {
+    cat <<'EOF'
+servers — start/stop/status for the local Reframing Reality services
+
+USAGE:
+    servers status                # show all services
+    servers status <name>         # show one
+    servers start <name>          # launch in background
+    servers stop <name>           # kill via PID file
+    servers restart <name>        # stop then start
+    servers tail <name> [N]       # tail last N lines of the log (default 50)
+
+LOGIN AUTOSTART (LaunchAgent for the dashboard):
+    servers install-agent         # enable rr-dash autostart at login
+    servers uninstall-agent       # disable it
+    servers agent-status          # check whether the agent is loaded
+
+SERVICES:
+    rag-ui       Alexandria RAG Web UI (port 5050) — controllable
+    rr-dash      This dashboard (port 8765) — status only
+    rag-mcp      Alexandria MCP Server — managed by Claude Desktop / Cowork
+
+PATHS:
+    PID files:    /tmp/rr-<name>.pid
+    Log files:    ~/Library/Logs/RR/<name>.log
+    LaunchAgent:  ~/Library/LaunchAgents/com.dukemedia.rrdash.plist
+EOF
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# LaunchAgent management (login autostart for rr-dash)
+# ─────────────────────────────────────────────────────────────────────
+
+AGENT_LABEL="com.dukemedia.rrdash"
+AGENT_PLIST_SRC="${VAULT}/com.dukemedia.rrdash.plist"
+AGENT_PLIST_DST="${HOME}/Library/LaunchAgents/com.dukemedia.rrdash.plist"
+
+cmd_install_agent() {
+    if [ ! -f "$AGENT_PLIST_SRC" ]; then
+        echo "Plist template not found at $AGENT_PLIST_SRC" >&2
+        exit 1
+    fi
+
+    mkdir -p "$(dirname "$AGENT_PLIST_DST")"
+
+    # If already loaded, unload first so we replace cleanly.
+    if launchctl list 2>/dev/null | grep -q "$AGENT_LABEL"; then
+        echo "Agent already loaded — unloading first..."
+        launchctl unload "$AGENT_PLIST_DST" 2>/dev/null || true
+    fi
+
+    cp "$AGENT_PLIST_SRC" "$AGENT_PLIST_DST"
+    echo "Copied: $AGENT_PLIST_DST"
+
+    launchctl load "$AGENT_PLIST_DST"
+    printf "${GREEN}Agent loaded.${OFF}  rr-dash will start at every login.\n"
+    echo "  Disable later with: ./servers uninstall-agent"
+    echo "  Check status with:  ./servers agent-status"
+    echo
+    echo "If it's not already running, give it a moment, then refresh"
+    echo "http://127.0.0.1:8765 — it should be there."
+}
+
+cmd_uninstall_agent() {
+    if [ -f "$AGENT_PLIST_DST" ]; then
+        launchctl unload "$AGENT_PLIST_DST" 2>/dev/null || true
+        rm -f "$AGENT_PLIST_DST"
+        printf "${GREEN}Agent uninstalled.${OFF}  rr-dash will not autostart anymore.\n"
+        echo "  The dashboard process itself is still running until you stop it"
+        echo "  (run: ./servers status — it'll show as running if it is)."
+    else
+        echo "No agent installed at $AGENT_PLIST_DST — nothing to do."
+    fi
+}
+
+cmd_agent_status() {
+    echo "LaunchAgent: $AGENT_LABEL"
+    echo "Plist:       $AGENT_PLIST_DST"
+    if [ -f "$AGENT_PLIST_DST" ]; then
+        printf "Plist file:  ${GREEN}installed${OFF}\n"
+    else
+        printf "Plist file:  ${YELLOW}not installed${OFF}\n"
+    fi
+
+    if launchctl list 2>/dev/null | grep -q "$AGENT_LABEL"; then
+        local line
+        line=$(launchctl list 2>/dev/null | grep "$AGENT_LABEL")
+        local pid status
+        pid=$(echo "$line"  | awk '{print $1}')
+        status=$(echo "$line" | awk '{print $2}')
+        printf "launchctl:   ${GREEN}loaded${OFF}  PID=$pid  last exit=$status\n"
+    else
+        printf "launchctl:   ${YELLOW}not loaded${OFF}\n"
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# Entry point
+# ─────────────────────────────────────────────────────────────────────
+
+case "${1:-help}" in
+    status)           shift; cmd_status "$@";;
+    start)            shift; cmd_start "$@";;
+    stop)             shift; cmd_stop "$@";;
+    restart)          shift; cmd_restart "$@";;
+    tail)             shift; cmd_tail "$@";;
+    install-agent)    shift; cmd_install_agent "$@";;
+    uninstall-agent)  shift; cmd_uninstall_agent "$@";;
+    agent-status)     shift; cmd_agent_status "$@";;
+    help|-h|--help)   cmd_help;;
+    *)                echo "Unknown command: $1" >&2; cmd_help; exit 2;;
+esac

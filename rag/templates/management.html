@@ -1,0 +1,556 @@
+{% extends 'base.html' %}
+
+{% block title %}Management - Alexandria RAG{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Index Management</h1>
+    <p class="subtitle">Manage and maintain your search index</p>
+</div>
+
+<!-- Index Statistics -->
+<div class="section">
+    <h2>Index Statistics</h2>
+    <div class="stats-table">
+        <div class="stat-row">
+            <span class="stat-label">Status</span>
+            <span class="stat-value" id="stat-status">Loading...</span>
+        </div>
+        <div class="stat-row">
+            <span class="stat-label">Books Indexed</span>
+            <span class="stat-value" id="stat-books">-</span>
+        </div>
+        <div class="stat-row">
+            <span class="stat-label">Text Chunks</span>
+            <span class="stat-value" id="stat-chunks">-</span>
+        </div>
+        <div class="stat-row">
+            <span class="stat-label">Index Size</span>
+            <span class="stat-value" id="stat-size">-</span>
+        </div>
+        <div class="stat-row">
+            <span class="stat-label">Created</span>
+            <span class="stat-value" id="stat-created">-</span>
+        </div>
+    </div>
+
+    <button id="refresh-stats-btn" class="btn btn-secondary">
+        🔄 Refresh Statistics
+    </button>
+</div>
+
+<!-- Incremental Update -->
+<div class="section">
+    <h2>➕ Update Index</h2>
+    <p class="section-description">
+        Add new books (and drop removed ones) without re-indexing everything. Only new or changed
+        books get re-embedded; your tuned settings (nlist 1024, nprobe 128, cosine) are preserved.
+        Takes minutes for a handful of books instead of hours.
+    </p>
+    <button id="update-btn" class="btn btn-secondary">➕ Update Index</button>
+    <span id="update-status-msg" class="scan-msg"></span>
+    <div id="update-progress-wrap" class="hidden" style="margin-top:1rem;">
+        <div class="progress-bar"><div id="update-fill" class="progress-fill"></div></div>
+        <p id="update-progress-msg" class="scan-progress-msg"></p>
+    </div>
+    <div class="workflow-note">
+        <strong>⚠️ After the update finishes:</strong> the Claude MCP server keeps its own copy of
+        the index in memory — new books stay invisible to Claude's searches until you restart it.
+        Restart the Claude Desktop / Cowork session (which relaunches the MCP server), then ask
+        Claude to search for one of the new books to confirm. This web UI picks up the new index
+        on its own.
+    </div>
+</div>
+
+<!-- PDF Health Check -->
+<div class="section">
+    <h2>🩺 PDF Health Check</h2>
+    <p class="section-description">
+        Scan PDFs for corrupted streams (the "Data-loss while decompressing" issue) without
+        re-indexing. Incremental: unchanged files (per <code>scan_manifest.json</code>) are skipped,
+        so after the first full run only new or changed files get scanned — seconds, not minutes.
+        Results are written to <code>problem_pdfs.txt</code>.
+    </p>
+    <select id="scan-mode" style="margin-right:0.5rem;">
+        <option value="incremental" selected>Incremental — new/changed files only</option>
+        <option value="verify">Verify — also re-hash unchanged files</option>
+        <option value="full">Full — rescan everything</option>
+    </select>
+    <button id="scan-btn" class="btn btn-secondary">🩺 Scan Library</button>
+    <span id="scan-status-msg" class="scan-msg"></span>
+
+    <div id="scan-progress-wrap" class="hidden" style="margin-top:1rem;">
+        <div class="progress-bar"><div id="scan-fill" class="progress-fill"></div></div>
+        <p id="scan-progress-msg" class="scan-progress-msg"></p>
+    </div>
+
+    <div id="scan-results" class="hidden" style="margin-top:1rem;"></div>
+    <div class="workflow-note">
+        <strong>Typical session:</strong> added books? → <em>Update Index</em> (then restart the
+        MCP server — see above). Want a corruption check? → <em>Scan Library</em> on Incremental.
+        The first incremental scan builds <code>scan_manifest.json</code> (~12 min); after that it
+        only scans new/changed files — seconds. <em>Verify</em> re-hashes unchanged files to catch
+        silent replacements (use after restoring from backup). <em>Full</em> ignores the manifest.
+    </div>
+</div>
+
+<!-- Danger Zone -->
+<div class="section danger-zone">
+    <h2>⚠️ Danger Zone</h2>
+    <p class="section-description">
+        These actions cannot be undone. Please be careful.
+    </p>
+
+    <div class="danger-action">
+        <div class="danger-info">
+            <h3>Clear Index</h3>
+            <p>Delete the current index and metadata files. You can rebuild it anytime.</p>
+        </div>
+        <button id="clear-index-btn" class="btn btn-danger">
+            🗑️ Clear Index
+        </button>
+    </div>
+</div>
+
+<!-- Maintenance Info -->
+<div class="section">
+    <h2>Maintenance Tips</h2>
+    <div class="tips-list">
+        <div class="tip">
+            <span class="tip-icon">💾</span>
+            <div>
+                <strong>Backup Your Index</strong>
+                <p>Keep <code>alexandria.index</code> and <code>alexandria_metadata.json</code> safe. The index takes time to build but can be regenerated.</p>
+            </div>
+        </div>
+        <div class="tip">
+            <span class="tip-icon">📚</span>
+            <div>
+                <strong>Adding Books</strong>
+                <p>If you add new books to your collection, go to the Indexing page and rebuild the index to include them.</p>
+            </div>
+        </div>
+        <div class="tip">
+            <span class="tip-icon">⚡</span>
+            <div>
+                <strong>Performance</strong>
+                <p>Search is faster on GPU. If you have CUDA or Metal, make sure you're using the GPU-accelerated version.</p>
+            </div>
+        </div>
+        <div class="tip">
+            <span class="tip-icon">🎯</span>
+            <div>
+                <strong>Better Results</strong>
+                <p>Use larger embedding models (all-mpnet-base-v2, all-roberta-large-v1) for higher quality search results, at the cost of speed.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.section {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    border: 1px solid #e0e0e0;
+}
+
+.section h2 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+}
+
+.section-description {
+    color: #666;
+    margin-bottom: 1rem;
+    font-size: 0.95rem;
+}
+
+.workflow-note {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    background: #fdf6e3;
+    border-left: 4px solid #e0b040;
+    border-radius: 4px;
+    color: #555;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.stats-table {
+    background: #f9f9f9;
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.stat-row:last-child {
+    border-bottom: none;
+}
+
+.stat-label {
+    font-weight: 500;
+    color: #333;
+}
+
+.stat-value {
+    color: #2196F3;
+    font-weight: 600;
+    font-family: monospace;
+}
+
+.danger-zone {
+    border: 2px solid #f44336;
+    background: #ffebee;
+}
+
+.danger-zone h2 {
+    color: #c62828;
+}
+
+.danger-action {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background: white;
+    border: 1px solid #ffcdd2;
+    border-radius: 6px;
+    margin-top: 1rem;
+}
+
+.danger-info {
+    flex: 1;
+}
+
+.danger-info h3 {
+    margin: 0 0 0.25rem 0;
+    color: #333;
+}
+
+.danger-info p {
+    margin: 0;
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.btn-danger {
+    background: #f44336;
+    color: white;
+    padding: 0.75rem 1.5rem;
+}
+
+.btn-danger:hover {
+    background: #da190b;
+}
+
+.btn-danger:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+
+.tips-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.tip {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem;
+    background: #f9f9f9;
+    border-left: 4px solid #2196F3;
+    border-radius: 6px;
+}
+
+.tip-icon {
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+
+.tip strong {
+    display: block;
+    margin-bottom: 0.25rem;
+    color: #333;
+}
+
+.tip p {
+    margin: 0;
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.tip code {
+    background: white;
+    padding: 0.2rem 0.4rem;
+    border-radius: 3px;
+    font-family: monospace;
+    color: #666;
+}
+
+.confirm-dialog {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    display: none;
+}
+
+.confirm-dialog.show {
+    display: flex;
+}
+
+.confirm-box {
+    background: white;
+    padding: 2rem;
+    border-radius: 8px;
+    text-align: center;
+    max-width: 400px;
+}
+
+.confirm-box h2 {
+    margin-top: 0;
+    color: #f44336;
+}
+
+.confirm-box p {
+    color: #666;
+    margin-bottom: 1.5rem;
+}
+
+.confirm-buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+}
+
+.confirm-buttons button {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.confirm-ok {
+    background: #f44336;
+    color: white;
+}
+
+.confirm-ok:hover {
+    background: #da190b;
+}
+
+.confirm-cancel {
+    background: #e0e0e0;
+    color: #333;
+}
+
+.confirm-cancel:hover {
+    background: #ccc;
+}
+.hidden { display: none; }
+.scan-msg { margin-left: 0.75rem; color: #666; font-size: 0.9rem; }
+.progress-bar { height: 10px; background: #e0e0e0; border-radius: 5px; overflow: hidden; }
+.progress-fill { height: 100%; width: 0%; background: #4CAF50; transition: width 0.3s; }
+.scan-progress-msg { font-size: 0.82rem; color: #555; margin-top: 0.5rem; font-family: monospace; }
+.scan-summary { padding: 0.6rem 0.8rem; border-radius: 6px; font-size: 0.9rem; margin-bottom: 0.6rem; }
+.scan-summary.ok { background: #e8f5e9; color: #2e7d32; }
+.scan-summary.bad { background: #fff3e0; color: #b26a00; }
+.scan-list { max-height: 320px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 6px; }
+.scan-item { padding: 0.5rem 0.75rem; border-bottom: 1px solid #f0f0f0; font-size: 0.85rem; }
+.scan-item:last-child { border-bottom: none; }
+.scan-item .f { font-family: monospace; color: #333; word-break: break-all; }
+.scan-item .i { color: #b26a00; font-size: 0.8rem; }
+</style>
+
+<!-- Confirmation Dialog -->
+<div id="confirm-dialog" class="confirm-dialog">
+    <div class="confirm-box">
+        <h2>⚠️ Clear Index?</h2>
+        <p>This will delete all index files. You can rebuild the index anytime.</p>
+        <div class="confirm-buttons">
+            <button id="confirm-ok" class="confirm-ok">Clear Index</button>
+            <button id="confirm-cancel" class="confirm-cancel">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<script>
+async function updateStats() {
+    try {
+        const response = await fetch('/api/index-stats');
+        const data = await response.json();
+
+        document.getElementById('stat-status').textContent =
+            data.indexed ? '✓ Ready' : '⚠️ Not Built';
+
+        document.getElementById('stat-books').textContent =
+            data.indexed ? data.books : '-';
+
+        document.getElementById('stat-chunks').textContent =
+            data.indexed ? data.chunks.toLocaleString() : '-';
+
+        document.getElementById('stat-size').textContent =
+            data.indexed ? (data.index_size_mb + data.metadata_size_mb).toFixed(1) + ' MB' : '-';
+
+        document.getElementById('stat-created').textContent =
+            data.indexed ? new Date(data.created_at).toLocaleString() : '-';
+
+    } catch (error) {
+        console.error('Error loading stats:', error);
+        document.getElementById('stat-status').textContent = '⚠️ Error';
+    }
+}
+
+// Refresh stats button
+document.getElementById('refresh-stats-btn').addEventListener('click', () => {
+    document.getElementById('refresh-stats-btn').disabled = true;
+    updateStats().then(() => {
+        document.getElementById('refresh-stats-btn').disabled = false;
+    });
+});
+
+// Clear index button
+document.getElementById('clear-index-btn').addEventListener('click', () => {
+    document.getElementById('confirm-dialog').classList.add('show');
+});
+
+document.getElementById('confirm-cancel').addEventListener('click', () => {
+    document.getElementById('confirm-dialog').classList.remove('show');
+});
+
+document.getElementById('confirm-ok').addEventListener('click', async () => {
+    document.getElementById('confirm-dialog').classList.remove('show');
+    document.getElementById('clear-index-btn').disabled = true;
+
+    try {
+        const response = await fetch('/api/clear-index', { method: 'POST' });
+        const data = await response.json();
+
+        if (response.ok) {
+            alert('Index cleared successfully');
+            updateStats();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        alert('Failed to clear index: ' + error.message);
+    } finally {
+        document.getElementById('clear-index-btn').disabled = false;
+    }
+});
+
+// ---- Incremental Update ----
+const updateBtn = document.getElementById('update-btn');
+updateBtn.addEventListener('click', async () => {
+    if (!confirm('Scan for new/changed/removed books and update the index? Runs in the background.')) return;
+    updateBtn.disabled = true;
+    document.getElementById('update-progress-wrap').classList.remove('hidden');
+    document.getElementById('update-status-msg').textContent = ' starting…';
+    try {
+        const r = await fetch('/api/update-index', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+        const d = await r.json();
+        if (d.error) { alert(d.error); updateBtn.disabled = false; return; }
+        pollUpdate();
+    } catch (e) { alert('Update failed to start: ' + e.message); updateBtn.disabled = false; }
+});
+
+async function pollUpdate() {
+    const s = await (await fetch('/api/indexing-status')).json();
+    document.getElementById('update-fill').style.width = (s.progress || 0) + '%';
+    document.getElementById('update-progress-msg').textContent = s.message || '';
+    document.getElementById('update-status-msg').textContent = '';
+    if (s.indexing) { setTimeout(pollUpdate, 1000); }
+    else { updateBtn.disabled = false; updateStats(); }
+}
+
+// ---- PDF Health Check ----
+const scanBtn = document.getElementById('scan-btn');
+
+scanBtn.addEventListener('click', async () => {
+    const mode = document.getElementById('scan-mode').value;
+    const warn = mode === 'incremental'
+        ? 'Scan new/changed PDFs for corruption? (First-ever run scans everything; after that, seconds.)'
+        : mode === 'verify'
+            ? 'Verify scan: re-hashes every file to catch silent replacements. Slower than incremental.'
+            : 'Full scan: every PDF, ignoring the manifest (~12+ min for a large library). Continue?';
+    if (!confirm(warn)) return;
+    scanBtn.disabled = true;
+    document.getElementById('scan-results').classList.add('hidden');
+    document.getElementById('scan-progress-wrap').classList.remove('hidden');
+    document.getElementById('scan-status-msg').textContent = ' starting…';
+    try {
+        const r = await fetch('/api/scan-pdfs', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({mode}) });
+        const d = await r.json();
+        if (d.error) { alert(d.error); resetScan(); return; }
+        document.getElementById('scan-status-msg').textContent = ' scanning ' + (d.books_dir || '');
+        pollScan();
+    } catch (e) { alert('Scan failed to start: ' + e.message); resetScan(); }
+});
+
+function resetScan() {
+    scanBtn.disabled = false;
+    document.getElementById('scan-status-msg').textContent = '';
+}
+
+async function pollScan() {
+    const r = await fetch('/api/scan-status');
+    const s = await r.json();
+    document.getElementById('scan-fill').style.width = (s.progress || 0) + '%';
+    document.getElementById('scan-progress-msg').textContent = s.message || '';
+    if (s.scanning) { setTimeout(pollScan, 1000); }
+    else { resetScan(); loadScanResults(); }
+}
+
+async function loadScanResults() {
+    const r = await fetch('/api/scan-results');
+    const d = await r.json();
+    const box = document.getElementById('scan-results');
+    box.classList.remove('hidden');
+    if (!d.exists) { box.innerHTML = '<div class="scan-summary ok">No scan report found yet.</div>'; return; }
+    if (!d.count) {
+        box.innerHTML = `<div class="scan-summary ok">✓ All clear — 0 problem PDFs${d.total ? ' of ' + d.total.toLocaleString() : ''}.</div>`;
+        return;
+    }
+    let html = `<div class="scan-summary bad">⚠ ${d.count} problem PDF${d.count>1?'s':''}${d.total ? ' of ' + d.total.toLocaleString() : ''} — saved to problem_pdfs.txt</div>`;
+    html += '<div class="scan-list">';
+    d.problems.forEach(p => {
+        const name = p.file.split('/').pop();
+        html += `<div class="scan-item"><div class="f" title="${p.file}">${name}</div><div class="i">${p.issue || ''}</div></div>`;
+    });
+    html += '</div>';
+    box.innerHTML = html;
+}
+
+// If a scan is already running (e.g. page reloaded), resume polling.
+(async () => {
+    const s = await (await fetch('/api/scan-status')).json();
+    if (s.scanning) { scanBtn.disabled = true; document.getElementById('scan-progress-wrap').classList.remove('hidden'); pollScan(); }
+    else { loadScanResults(); }
+})();
+
+// Load stats on page load
+updateStats();
+
+// Refresh stats every 30 seconds
+setInterval(updateStats, 30000);
+</script>
+{% endblock %}
