@@ -48,7 +48,7 @@ You don't have to do anything about this — it's already handled. Just **don't 
 
 ---
 
-## What's current (updated 2026-07-29)
+## What's current (updated 2026-08-08)
 
 A running snapshot of how the live system behaves today. The step-by-step parts below still apply; this section captures the hardening added since the first build so the guide matches what's actually on the machine.
 
@@ -60,7 +60,9 @@ A running snapshot of how the live system behaves today. The step-by-step parts 
 
 **Incremental updates work and are the normal way to grow the library.** "Update Index" re-embeds only added/changed books, drops removed ones, and rebuilds keeping your tuned `nlist`/`nprobe`/metric. It relies on two small files every full build now writes — `alexandria_manifest.json` (per-file signature) and `alexandria_embeddings.npy` — so run at least one full build with the current code before relying on incremental.
 
-**Current index:** IVFFlat, cosine (inner product on normalized vectors), `nlist 1024`, `nprobe 128`, model `all-MiniLM-L6-v2` (384-dim), ~3.3M chunks.
+**Current index:** IVFFlat, cosine (inner product on normalized vectors), `nlist 1024`, `nprobe 128`, model `intfloat/multilingual-e5-small` (384-dim), 1,994,790 chunks across 5,853 books, 3.08 GB.
+
+**The model changed, and the reason matters.** `all-MiniLM-L6-v2` is English-only. On a library holding Greek, Latin, Hebrew and German it scored a Greek passage against its own English translation at 0.116 — below any usable threshold, so those books were not ranked low, they were unreachable. `multilingual-e5-small` scores the same pair at 0.91. Both are 384-dimensional, which is the trap: point the wrong one at an index built by the other and nothing errors, the dimensions line up, and every result is quiet nonsense. That is why the index now writes an `embedding_model.json` sidecar naming the model, its prefixes and its chunk size, and why `query_rag.py` reads that file and **overrides** whatever model name it was handed. e5 also requires prefixes — `passage: ` at index time, `query: ` at search time — and omitting them costs real accuracy while erroring not at all.
 
 **Local MCP servers** (ten of them, letting Claude query the corpora directly, managed by Claude Desktop / Cowork over stdio): Alexandria RAG, Greek, Latin (with the Lewis & Short dictionary), Perseus, WikiSpooks, Pleiades, Wikipedia (offline Kiwix), Scriptures (Qur'an / Enoch / Tanakh / Talmud / Mishnah / Ethiopian Tewahedo canon), Project Gutenberg, and Papyri (Duke Databank, ~67.6k documentary papyri). Setup and config live in *"Set Up the MCP Servers with Claude Cowork."* After a rebuild, restart the Alexandria MCP server (or Claude Desktop) so it loads the fresh index instead of the one it holds in memory.
 
@@ -231,19 +233,77 @@ Search quality is capped by extraction quality: a passage the extractor never re
 
 **Parallel, cached, PyTorch-free extraction.** `extract_text.py` reads text from every PDF/EPUB across several CPU cores and writes each book's text to an on-disk cache, keyed by the file's path + modification time + size. Unchanged books are read straight from cache on later runs, so re-indexing (for a new model, a new chunk size, or a few added books) skips the multi-hour extraction entirely. Change a file and its signature changes, so it's automatically re-read.
 
-**A per-file watchdog so one malformed PDF can't hang everything.** A single corrupt PDF can send the parser (pdfminer) into an effectively infinite loop and freeze the whole run. Each file is parsed under a `SIGALRM` timer (default **90 seconds**, set `ALEX_EXTRACT_TIMEOUT` to change it); if a file blows the limit it's aborted, logged as an error, and the run continues instead of deadlocking.
+**A per-file watchdog, scaled to the file.** A single corrupt PDF can send the parser (pdfminer) into an effectively infinite loop and freeze the whole run, so each file is parsed under a `SIGALRM` timer. The limit was a flat 90 seconds until it truncated a 2,437-page, 200 MB volume that pdfplumber simply could not read that fast: the book was abandoned, 20 KB of Google Books front matter stayed in the cache, and it indexed as six chunks in place of 6,522. Nothing flagged it. The budget now scales — the 90-second floor, or six seconds per megabyte, capped at 30 minutes (`ALEX_EXTRACT_TIMEOUT`, `ALEX_EXTRACT_SECONDS_PER_MB`, `ALEX_EXTRACT_TIMEOUT_MAX`). An ordinary book is unaffected; a genuine infinite loop still dies at the ceiling.
 
 **A memory cap so one bloated extraction can't crash the Mac.** A malformed PDF can extract to gigabytes of garbage text; chunking that can exhaust RAM. Any single document over **~50 MB of extracted text** (`ALEX_MAX_DOC_CHARS`, ≈ a 10,000-page book) is truncated with a warning rather than allowed to balloon.
 
 **Recoverable-damage reporting.** pdfminer emits warnings like *"Data-loss while decompressing corrupted data"* with no filename. The system captures those per-file and writes the offending paths to **`problem_pdfs.txt`** so you know which books extracted imperfectly and might be worth re-downloading. The text that could be recovered is still indexed.
 
-**Chunking that respects the model's limits.** Text is split into **200-word chunks with 40-word overlap**. The embedding model (`all-MiniLM-L6-v2`) only reads 256 word-pieces at once; a bigger chunk would be silently truncated and that text lost. 200 words stays safely under the ceiling, and the overlap keeps ideas that straddle a boundary findable. Every chunk is normalized so search uses cosine similarity.
+**Chunking sized from the model's real token limit.** Chunk size is no longer a constant. `chunk_params_for()` reads `max_seq_length` off the loaded model and derives words from it at roughly 1.45 subword tokens per word, with the overlap at a fifth of the chunk: a 512-token model such as e5-small takes **353 words with 70 of overlap**, where a 256-token model takes 200 with 40. Hard-coding one number meant that switching models in the dropdown silently mis-sized every chunk — too big and the tail of each one is truncated away unread, too small and you waste the model. Every chunk is normalized so search uses cosine similarity.
 
 **A standalone health check (no re-indexing).** `scan_pdfs.py` — reachable from **Management → 🩺 PDF Health Check** — checks the library for corruption independently of indexing, in three modes: **incremental** (skip files unchanged since the last scan, per the manifest — the default), **verify** (re-hash even unchanged files), and **full** (rescan everything). Results stream to the dashboard and to `problem_pdfs.txt`. Add `--include-epub` to cover ebooks.
 
 **An alignment guard on every build.** Row *i* of the embeddings must map to metadata row *i*, or every search result gets attributed to the wrong book. `build_index_cli.py` refuses to build from an embeddings file whose row count disagrees with `alexandria_metadata.json`, and falls back to reconstructing exact vectors from the live index when a saved `.npy` is stale. This is why the two files are always written together.
 
 **Everyday cadence.** Drop new PDFs in, run **Update Index** (incremental), and periodically run the **PDF Health Check** to catch newly-added damaged files. To preview exactly what an incremental run will do without touching anything, run it from Terminal with `--incremental --dry-run`: it reports manifest/`.npy` presence, vector↔metadata alignment, any stale lock, and the precise add/change/remove counts, then exits.
+
+---
+
+## The failures that don't announce themselves
+
+Every problem in the Troubleshooting section below tells you it happened. These
+don't. They leave a book in the library list, with a plausible chunk count, that
+returns nothing — or worse, returns something wrong. They are the ones worth
+knowing about in advance, because none of them will ever raise an error.
+
+Each was found by accident. That is the point.
+
+**A text layer laid on top of a text layer.** OCR adds an invisible text layer;
+it never removes one. Run OCR on a book that already has good text and every
+word ends up in the file twice, so the extractor emits the page, then emits it
+again. On 2026-08-08 this happened to 73 books at once, because the work queue
+was written as a union with its own previous contents and therefore could only
+grow — an entry added when a book had no text survived the book being replaced
+with a good copy, and came round again years later. The signature is unmistakable
+once you look for it: word count doubles while the proportion of real words does
+not move at all. That only happens when the same words are written twice. The
+guard now lives in the OCR pass itself, not just in the queue, because the queue
+is only one of several ways a file can arrive at the pass.
+
+**An English word-list used to judge a Latin book.** Every quality test in this
+system began life as "what fraction of the extracted words are common English
+words." Migne's *Patrologia Latina* scores 3% on that test and is flawless Latin;
+Chalybäus scores 4% and is flawless German; Greek and Hebrew do not survive the
+`[A-Za-z]` token pattern at all. Books like these read as unrecoverable garbage
+and get queued for the very OCR pass that would destroy them. The test now
+calibrates on the document's own vocabulary instead: real writing reuses its
+words heavily — a type-token ratio around 0.08 for a novel, 0.15 for Migne —
+while OCR noise almost never repeats, and lands near 0.37. That measure works in
+any language because it never asks what language it is reading.
+
+**Page sampling that lands on the same kind of page every time.** Typescript and
+mimeograph are printed on one side, so the versos are blank. An evenly spaced
+sample takes an even stride and therefore hits blank pages every single time: one
+850-page volume measured **zero words per page across eight probes** while
+actually holding 227,754 words. A file that reads as empty is a file every guard
+waves straight through. Probe consecutive *pairs* of pages, or extract the whole
+document — never single pages at a fixed interval.
+
+**Two columns read straight across the gutter.** pdfplumber follows page
+geometry, so on a two-column book it takes line 1 of column A, then line 1 of
+column B, then line 2 of A. Every word is real and in the right language. Every
+sentence is destroyed. The book indexes, reports a healthy chunk count, and
+cannot be retrieved even by an exact sentence copied off its own page. In a
+random sample of 60 books, **12 were affected**. `pdftotext -raw` follows the
+content stream instead and reads such a page correctly — comparing the two
+orderings on one page is a cheap detector for the whole library.
+
+**What they have in common.** In each case the pipeline reported success, the
+counts looked reasonable, and the damage was only visible if you read the text.
+A count is not evidence. If you take one habit from this guide, take this one:
+after any bulk operation, open the actual text of two or three books and read a
+paragraph.
+
 
 ---
 
@@ -274,6 +334,29 @@ python3 app.py
 
 **I changed a setting from the command line but the website still shows the old one.** The running website loaded the index into memory when it started and doesn't notice changes made from the Terminal. **Restart it** (`Ctrl+C` in its window, then `python3 app.py`). Rebuilds done *from the Tuning tab* reload automatically; command-line rebuilds need a restart.
 
+**A book is in the library list but never appears in results.** Check its chunk
+count in `alexandria_manifest.json` against the book's size. Six chunks for a
+2,000-page volume means extraction was abandoned — most often the per-file
+watchdog on a very large file (see above). Re-extract it and mark its manifest
+entry stale so the next incremental run picks it up. **Mark it stale; do not
+delete it.** `run_incremental` computes `added` as *on disk but not in metadata*
+and `changed` as *manifest signature differs*, so a book that is already in the
+metadata with no manifest entry falls through both branches and can never be
+re-embedded. Give the entry a signature that cannot match instead — `{"sig": "0 0"}`.
+
+**A book returns nothing even for an exact sentence from its own page.** Its
+text is probably column-interleaved (see above). Compare one page through
+`pdftotext -raw` against `pdftotext -layout`: if the same words come back in a
+very different order, the book has columns and the indexed copy is scrambled.
+
+**A filename promises one book and the file contains another.** A volume titled
+*Patrologia Graeca* Vol. 6, Justin Martyr held Gregory of Tours in Latin, with
+zero pages of Greek in 647. Nothing in the pipeline compares a book's contents to
+its name, and a wrong title in a citation is worse than a missing one. When
+renaming, the path is the key in the text cache (a SHA-1 of it), the ledger and
+the manifest — move all three with the file or you orphan the cache and the book
+re-extracts from scratch.
+
 **I typed a question and got `zsh: no matches found`.** You typed it into the Terminal by mistake. Questions for Claude go in the Cowork chat window; only commands go in the Terminal.
 
 ---
@@ -284,7 +367,8 @@ For the curious, here are the deliberate choices, each of which came from a real
 
 - **Two-stage builds (embeddings, then index) in separate programs** — prevents the PyTorch/FAISS OpenMP crash. The single most important rule.
 - **Cosine similarity (normalized inner product)** — the embedding model is trained for it; using plain distance quietly hurts result quality.
-- **~200-word chunks** — the model can only read 256 word-pieces at a time; bigger chunks get silently cut off, so text is wasted. 200 words stays under the limit.
+- **Chunk size derived from the model, not hard-coded** — a chunk longer than the model's token limit has its tail silently discarded, and the loss is invisible. Reading `max_seq_length` off the model means changing models in the dropdown cannot quietly break the chunking.
+- **A sidecar naming the embedding model** — two different 384-dimensional models load against each other's indexes without complaint and return nonsense. The sidecar makes the mismatch impossible rather than merely unlikely.
 - **Parallel extraction with an on-disk cache** — extraction is the slow phase; doing it across several cores and caching the text means you pay the cost once, not every time.
 - **A deliberately modest worker count (4 by default)** — PDF parsing is memory-heavy, and running one parser per core on a many-core machine can exhaust RAM and swap badly enough to *crash the whole Mac* (a kernel panic). Four parallel parsers is safe and still far faster than one at a time. A "less is more" choice learned the hard way.
 - **Incremental updates re-extract only the new books** — adding books processes just those, never the whole library, so a routine update can't set off a mass parallel extraction.
@@ -305,7 +389,7 @@ This whole system was built and refined *with* Claude Cowork, and your friend ca
 
 ## Appendix A — What each file does (reference)
 
-- **`index_books.py`** — orchestrates indexing. Reads books (via the cache), makes embeddings, saves them. Flags: `--embeddings-only` (stage 1 of a full build), `--incremental` (add/remove changed books only), `--scan-only` (corruption check). Also holds the chunking logic (200-word chunks) and normalizes embeddings for cosine.
+- **`index_books.py`** — orchestrates indexing. Reads books (via the cache), makes embeddings, saves them. Flags: `--embeddings-only` (stage 1 of a full build), `--incremental` (add/remove changed books only), `--scan-only` (corruption check). Also holds the chunking logic (sized from the model's token limit) and normalizes embeddings for cosine.
 - **`extract_text.py`** — PyTorch-free. Extracts PDF/EPUB text in parallel across a *capped* number of cores (4 by default — PDF parsing is memory-heavy, so too many at once can crash the Mac) and caches each file's text on disk, keyed by the file's modification time and size (so changed files are re-read, unchanged ones reused).
 - **`build_index_cli.py`** — PyTorch-free. Builds any index type (Flat, IVFFlat, IVFPQ, HNSW) from saved embeddings or an existing index, with cosine or L2. This is the program that *must* stay separate from PyTorch.
 - **`query_rag.py`** — loads the index and model, turns a question into a normalized vector, searches, and returns ranked passages. Detects the index type and supports live tuning (nprobe / efSearch).
@@ -471,24 +555,82 @@ def _extract_epub(path):
     return "\n".join(text), []
 
 
+import signal
+
+
+class _ExtractTimeout(Exception):
+    pass
+
+
+def _on_alarm(signum, frame):
+    raise _ExtractTimeout()
+
+
+# A single malformed PDF can send pdfminer into an effectively infinite loop and
+# DEADLOCK the whole worker pool — one bad file freezes the entire index build
+# (observed 2026-07). Each worker runs one file on its main thread, so a SIGALRM
+# watchdog aborts that file and records it as an error, letting the run continue
+# instead of hanging forever.
+#
+# The limit has to scale with the book. A flat 90 seconds silently truncated
+# Michael L. Rodkinson's *New Edition of the Babylonian Talmud* — 2,437 pages,
+# 200 MB, 1,043,500 words — which pdfplumber cannot read anywhere near that fast.
+# What stayed in the cache was 20 KB of Google Books front matter, and that is
+# what got embedded: the book indexed, reported six chunks, appeared in the
+# library list, and would never have returned a passage. Nothing distinguished it
+# from a book that genuinely holds two thousand words (2026-08-08).
+#
+# Scaling by file size costs one stat and bounds the damage either way: a normal
+# book still gets the old 90-second floor, a 200 MB volume gets twenty minutes,
+# and a genuine infinite loop still dies at the ceiling.
+PER_FILE_TIMEOUT = int(os.environ.get("ALEX_EXTRACT_TIMEOUT", "90"))
+TIMEOUT_CEILING = int(os.environ.get("ALEX_EXTRACT_TIMEOUT_MAX", "1800"))
+SECONDS_PER_MB = float(os.environ.get("ALEX_EXTRACT_SECONDS_PER_MB", "6"))
+
+
+def timeout_for(path):
+    """Seconds to allow this file: the floor, or six seconds a megabyte, capped."""
+    try:
+        mb = os.path.getsize(path) / 1_000_000
+    except OSError:
+        return PER_FILE_TIMEOUT
+    return int(max(PER_FILE_TIMEOUT, min(TIMEOUT_CEILING, mb * SECONDS_PER_MB)))
+
+
 def extract_one(task):
     """Worker: extract one book to cache. Returns (path, status, [issues])."""
     path, cache_dir, use_cache = task
     if use_cache and is_cached(cache_dir, path):
         return (path, "cached", [])
+    armed = False
     try:
         low = path.lower()
+        if not (low.endswith(".pdf") or low.endswith(".epub")):
+            return (path, "skip", [])
+        budget = timeout_for(path)
+        try:
+            signal.signal(signal.SIGALRM, _on_alarm)
+            signal.alarm(budget)
+            armed = True
+        except (ValueError, AttributeError):
+            armed = False          # not on the main thread / unsupported platform
         if low.endswith(".pdf"):
             text, warns = _extract_pdf(path)
-        elif low.endswith(".epub"):
-            text, warns = _extract_epub(path)
         else:
-            return (path, "skip", [])
+            text, warns = _extract_epub(path)
         write_cache(cache_dir, path, text)
         status = "ok" if text.strip() else "empty"
         return (path, status, warns)
+    except _ExtractTimeout:
+        return (path, "error",
+                [f"timeout: extraction exceeded {budget}s "
+                 f"({os.path.getsize(path)/1e6:.0f} MB) — malformed, or raise "
+                 f"ALEX_EXTRACT_SECONDS_PER_MB"])
     except Exception as e:
         return (path, "error", [f"{type(e).__name__}: {e}"])
+    finally:
+        if armed:
+            signal.alarm(0)
 
 
 def find_books(input_dir, include_epub):
@@ -567,7 +709,6 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-
 ```
 
 ### `scan_pdfs.py`
@@ -950,6 +1091,14 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 import faiss
 
+# Baked-in default for IVF indexes. 128 is the recall/latency knee for the
+# current index: ~99% recall vs an exhaustive scan at <10 ms/query, measured by
+# the Recall-vs-Latency sweep (2026-07). Below this you lose real recall; above
+# it latency climbs while recall is already flat. Applied on every load, so the
+# MCP server, the web UI, and any rebuild all start here. It is a FLOOR, not a
+# cap — a higher value deliberately persisted in the index is left untouched.
+DEFAULT_NPROBE = 128
+
 
 class RAGQuerier:
     """Query semantic search index."""
@@ -967,7 +1116,27 @@ class RAGQuerier:
                 "Run index_books.py first."
             )
 
-        print(f"Loading embedding model: {model_name}")
+        # Which model built this index? Do not guess. multilingual-e5-small and
+        # all-MiniLM-L6-v2 are BOTH 384-dim, so loading the wrong one raises no
+        # dimension error -- it returns confident nonsense. index_books.py
+        # records the answer beside the index; trust that over any default.
+        self.query_prefix = ""
+        _meta = index_dir / "embedding_model.json"
+        if _meta.exists():
+            try:
+                _m = json.loads(_meta.read_text())
+                if _m.get("model"):
+                    model_name = _m["model"]
+                self.query_prefix = _m.get("query_prefix", "") or ""
+            except Exception as _e:
+                print(f"  ! could not read embedding_model.json: {_e}")
+        else:
+            print("  ! no embedding_model.json beside the index -- assuming "
+                  f"{model_name}. If the index was built with another model, "
+                  "results will be silently wrong.")
+
+        print(f"Loading embedding model: {model_name}"
+              + (f"  (query prefix {self.query_prefix!r})" if self.query_prefix else ""))
         self.model = SentenceTransformer(model_name)
 
         print(f"Loading FAISS index from {index_path}")
@@ -988,6 +1157,10 @@ class RAGQuerier:
         # Detect metric: inner product (cosine, on normalized vectors) vs L2.
         self.is_cosine = (self.index.metric_type == faiss.METRIC_INNER_PRODUCT)
         self.metric = "cosine" if self.is_cosine else "l2"
+
+        # Apply the baked-in nprobe default (floor). See DEFAULT_NPROBE above.
+        if self.is_ivf and self.index.nprobe < DEFAULT_NPROBE:
+            self.index.nprobe = DEFAULT_NPROBE
 
         with open(metadata_path) as f:
             self.metadata = json.load(f)
@@ -1032,7 +1205,8 @@ class RAGQuerier:
         # many/all clusters, and multi-threaded FAISS beside torch can segfault.
         faiss.omp_set_num_threads(1)
 
-        emb = self.model.encode(queries, convert_to_numpy=True).astype("float32")
+        _q = [self.query_prefix + q for q in queries] if self.query_prefix else queries
+        emb = self.model.encode(_q, convert_to_numpy=True).astype("float32")
         if self.is_cosine:
             faiss.normalize_L2(emb)
         nq = len(queries)
@@ -1083,7 +1257,8 @@ class RAGQuerier:
             self.set_search_params(nprobe=nprobe, ef_search=ef_search)
 
         # Encode query
-        query_embedding = self.model.encode([query], convert_to_numpy=True).astype("float32")
+        query_embedding = self.model.encode(
+            [self.query_prefix + query], convert_to_numpy=True).astype("float32")
         # For cosine indexes, the query must be normalized the same way the
         # stored vectors were, so inner product equals cosine similarity.
         if self.is_cosine:
@@ -1198,7 +1373,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 ```
 
 ### `index_books.py`
@@ -1212,6 +1386,23 @@ By default, indexes PDF files only. Use --include-epub to also process EPUB file
 """
 
 import os
+# ── Memory/thread safety (MUST run before numpy/torch/faiss import) ──────────
+# The full-library embed crashed a 128 GB Mac twice: a single Python process hit
+# 123 GB with load average 321. Two causes, both tamed here + in generate_embeddings:
+#   1. MPS (Apple GPU) uses UNIFIED system RAM and its allocator accumulates
+#      across the ~25k encode() calls of a full run unless the cache is flushed.
+#   2. Unbounded thread fan-out (OpenMP/tokenizers) drove the load to 321.
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+os.environ.setdefault("OMP_NUM_THREADS", "4")
+os.environ.setdefault("MKL_NUM_THREADS", "4")
+# GPU (MPS) is the DEFAULT again and is safe now that (a) the streaming embed
+# never holds the matrix in RAM, (b) empty_cache runs every batch, (c) the web UI
+# frees its index during a rebuild, (d) only one embed runs at a time (lockfile),
+# and (e) an RSS watchdog aborts gracefully long before the machine can freeze.
+# We deliberately do NOT set PYTORCH_MPS_*_WATERMARK_RATIO: setting the HIGH ratio
+# below the default LOW ratio makes torch raise "invalid low watermark ratio" at
+# model load (hit 2026-07). Memory is bounded by empty_cache + the watchdog, not
+# by fighting the watermarks. Force CPU with ALEX_EMBED_DEVICE=cpu if ever needed.
 import sys
 import json
 import logging
@@ -1229,6 +1420,33 @@ from sentence_transformers import SentenceTransformer
 import faiss
 
 warnings.filterwarnings("ignore")
+
+
+# --------------------------------------------------------------------------- #
+# Memory instrumentation — so a run TELLS us where RAM goes instead of us
+# reading Activity Monitor tea leaves. _rss_gb() returns the process's current
+# resident set in GB (psutil if present; falls back to resource peak).
+# --------------------------------------------------------------------------- #
+def _rss_gb() -> float:
+    try:
+        import psutil
+        return psutil.Process(os.getpid()).memory_info().rss / 1e9
+    except Exception:
+        try:
+            import resource
+            m = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            # macOS reports bytes; Linux reports kilobytes.
+            return (m / 1e9) if sys.platform == "darwin" else (m / 1e6)
+        except Exception:
+            return -1.0
+
+
+def _log_rss(phase: str) -> float:
+    g = _rss_gb()
+    if g >= 0:
+        print(f"  [mem] {phase}: {g:.1f} GB RSS", flush=True)
+    return g
+
 
 # Files that triggered recoverable extraction issues (e.g. pdfminer's
 # "Data-loss while decompressing corrupted data"). pdfminer logs those as bare
@@ -1282,6 +1500,63 @@ def write_problem_report(output_dir: str = "."):
 # tokens, so the model would silently truncate the last ~25%. 200 words keeps
 # each chunk at/under the model limit so the whole chunk actually gets embedded.
 CHUNK_SIZE = 200  # words per chunk (kept under the 256-token model limit)
+
+# Long-context models make the 200-word ceiling pointless: it exists only
+# because MiniLM truncates at 256 subword tokens. 400 words (~520 tokens) fits
+# any 512+ token model, keeps an argument intact instead of splitting it mid
+# paragraph, and still localises a hit to roughly a page -- which matters when
+# the result has to support a footnote. Overridable with ALEX_CHUNK_WORDS.
+LONG_CONTEXT_CHUNK_SIZE = 400
+LONG_CONTEXT_OVERLAP = 80
+
+
+def prefixes_for(model_name: str) -> tuple:
+    """(document prefix, query prefix). The e5 family is TRAINED with these; omit
+    them and retrieval quality drops measurably. Both sides must agree, or the
+    query lands in a different region of the space than the passages."""
+    n = (model_name or "").lower()
+    if "e5" in n:
+        return "passage: ", "query: "
+    return "", ""
+
+
+def write_embedding_meta(output_dir, indexer):
+    """Record WHICH model built this index, beside the index itself.
+
+    Without this the querier defaults to all-MiniLM-L6-v2. multilingual-e5-small
+    is also 384-dim, so querying an e5 index with MiniLM raises no dimension
+    error -- it just returns quiet nonsense. This file is what prevents that."""
+    meta = {
+        "model": getattr(indexer, "model_name", None),
+        "dim": indexer.embedding_dim,
+        "doc_prefix": getattr(indexer, "doc_prefix", ""),
+        "query_prefix": getattr(indexer, "query_prefix", ""),
+        "max_seq_length": getattr(indexer.model, "max_seq_length", None),
+        "chunk_words": chunk_params_for(indexer.model)[0],
+    }
+    (Path(output_dir) / "embedding_model.json").write_text(json.dumps(meta, indent=2))
+    print(f"  recorded embedding model: {meta['model']} (dim {meta['dim']}, "
+          f"prefix {meta['doc_prefix']!r})", flush=True)
+
+
+def chunk_params_for(model) -> tuple:
+    """Pick (words, overlap) from the loaded model's real token limit, so that
+    switching models in the UI cannot silently mis-size chunks in either
+    direction."""
+    override = os.environ.get("ALEX_CHUNK_WORDS")
+    if override:
+        w = int(override)
+        return w, max(1, int(w * 0.2))
+    limit = getattr(model, "max_seq_length", 0) or 0
+    # ~1.4 subword tokens per whitespace word; leave headroom so a chunk's tail
+    # is never silently truncated. A 512-token model takes ~350 words, not the
+    # 400 a coarse threshold would have handed it.
+    if limit >= 2048:
+        return LONG_CONTEXT_CHUNK_SIZE, LONG_CONTEXT_OVERLAP
+    if limit >= 512:
+        w = int(limit / 1.45)
+        return w, max(1, int(w * 0.2))
+    return CHUNK_SIZE, CHUNK_OVERLAP
 CHUNK_OVERLAP = 40  # words of overlap between chunks
 MODEL_NAME = "all-MiniLM-L6-v2"  # Fast, effective, 384-dim embeddings
 BATCH_SIZE = 128  # Batch size for embedding generation
@@ -1444,11 +1719,55 @@ class RAGIndexer:
                  detect_duplicates: bool = False):
         """Initialize embedder and FAISS index."""
         print(f"Loading embedding model: {model_name}")
-        self.model = SentenceTransformer(model_name)
+        # Device: DEFAULT TO MPS (Apple GPU) for speed. The earlier 25 GB climb
+        # was MPS competing with a stale index in the web UI (~8 GB) + duplicate
+        # MCP servers (~16 GB), not MPS alone — a single streaming embed is well
+        # within 48 GB now. If MPS isn't available (non-Mac, older torch) we fall
+        # back to CPU automatically. Force CPU with ALEX_EMBED_DEVICE=cpu.
+        requested = os.environ.get("ALEX_EMBED_DEVICE", "mps").lower()
+        device = requested
+        if requested == "mps":
+            try:
+                import torch
+                if not (hasattr(torch.backends, "mps") and
+                        torch.backends.mps.is_available()):
+                    print("  ⚠ MPS not available on this machine — using CPU.")
+                    device = "cpu"
+            except Exception:
+                device = "cpu"
+        self.model = SentenceTransformer(model_name, device=device)
+        self.model_name = model_name
+        self.doc_prefix, self.query_prefix = prefixes_for(model_name)
         self.embedding_dim = self.model.get_sentence_embedding_dimension()
         self.batch_size = batch_size
 
-        # Check for GPU
+        # BATCH_SIZE=128 was tuned for MiniLM: 22M params, 384 dims, 256-token
+        # ceiling. A 568M-param 1024-dim model at that batch size drove a 48 GB
+        # machine to 59 GB resident and 39 GB of swap -- 11 s/batch of pure
+        # paging, a 40-hour ETA for work that takes well under an hour resident.
+        # Scale the batch to the model, and cap the sequence window to what we
+        # actually feed it (400-word chunks are ~520 tokens; 8192 is dead weight).
+        try:
+            if self.embedding_dim >= 1024:
+                self.batch_size = int(os.environ.get("ALEX_BATCH_SIZE", "16"))
+                if getattr(self.model, "max_seq_length", 0) > 1024:
+                    self.model.max_seq_length = int(
+                        os.environ.get("ALEX_MAX_SEQ", "1024"))
+            elif os.environ.get("ALEX_BATCH_SIZE"):
+                self.batch_size = int(os.environ["ALEX_BATCH_SIZE"])
+        except Exception:
+            pass
+        print(f"  batch_size={self.batch_size}  dim={self.embedding_dim}  "
+              f"max_seq={getattr(self.model, 'max_seq_length', '?')}", flush=True)
+
+        # Cap torch's intra-op threads so embedding can't spawn a thread storm
+        # (the crash showed load average 321). Safe if torch isn't present.
+        try:
+            import torch
+            torch.set_num_threads(int(os.environ.get("OMP_NUM_THREADS", "4")))
+        except Exception:
+            pass
+
         if hasattr(self.model, 'device'):
             print(f"Using device: {self.model.device}")
 
@@ -1466,7 +1785,20 @@ class RAGIndexer:
         if not text.strip():
             return 0
 
-        chunks = TextChunker.chunk_text(text)
+        # Guard against ONE pathological document exploding memory. A malformed
+        # PDF can extract to GIGABYTES of garbage text; chunking that builds a
+        # word list + chunk list large enough to OOM the machine (observed: a
+        # single added PDF drove the process to 37 GB at 1% progress). ~50 MB of
+        # text is already a ~10,000-page book — beyond that, truncate and warn.
+        max_chars = int(os.environ.get("ALEX_MAX_DOC_CHARS", str(50_000_000)))
+        if len(text) > max_chars:
+            print(f"  ⚠ {Path(file_path).name}: {len(text)/1e6:.0f} MB of extracted "
+                  f"text — truncating to {max_chars // 10**6} MB (malformed PDF?)",
+                  flush=True)
+            text = text[:max_chars]
+
+        _cw, _co = chunk_params_for(getattr(self, "model", None))
+        chunks = TextChunker.chunk_text(text, chunk_size=_cw, overlap=_co)
         for i, chunk in enumerate(chunks):
             self.chunks.append(chunk)
             self.document_file_paths.append(file_path)
@@ -1490,19 +1822,133 @@ class RAGIndexer:
             print("No chunks to embed.")
             return np.empty((0, self.embedding_dim), dtype="float32")
 
-        print(f"\nGenerating embeddings for {len(self.chunks)} chunks...")
-        embeddings = []
-        iterator = tqdm(range(0, len(self.chunks), self.batch_size)) if show_progress else range(0, len(self.chunks), self.batch_size)
-        for i in iterator:
+        import gc
+        n = len(self.chunks)
+        print(f"\nGenerating embeddings for {n} chunks...")
+
+        # Preallocate ONE contiguous output matrix and fill it in place. The old
+        # code accumulated a list, then np.vstack, then np.ascontiguousarray —
+        # THREE full copies of the matrix resident at once. For 3.3M chunks that
+        # is ~15 GB of avoidable churn on top of the real killer below.
+        out = np.empty((n, self.embedding_dim), dtype="float32")
+
+        # Is MPS (Apple GPU, unified RAM) in play? If so we must release its
+        # allocator cache each batch, or it hoards every batch it ever saw and
+        # the process climbs to 100 GB+ over a full run.
+        mps_flush = None
+        try:
+            import torch
+            if getattr(self.model, "device", None) is not None and \
+               str(self.model.device).startswith("mps") and \
+               hasattr(getattr(torch, "mps", None), "empty_cache"):
+                mps_flush = torch.mps.empty_cache
+        except Exception:
+            pass
+
+        iterator = tqdm(range(0, n, self.batch_size)) if show_progress else range(0, n, self.batch_size)
+        for step, i in enumerate(iterator):
             batch = self.chunks[i : i + self.batch_size]
             # normalize_embeddings=True → unit vectors, so inner product == cosine.
-            # all-MiniLM (and bge/e5/gte) are trained for cosine similarity.
-            batch_embeddings = self.model.encode(
-                batch, convert_to_numpy=True, show_progress_bar=False,
+            _b = [self.doc_prefix + c for c in batch] if self.doc_prefix else batch
+            be = self.model.encode(
+                _b, convert_to_numpy=True, show_progress_bar=False,
                 normalize_embeddings=True)
-            embeddings.append(batch_embeddings)
+            out[i : i + len(batch)] = be
+            del be
+            if mps_flush is not None:
+                mps_flush()                      # hand memory back every batch
+            if step % 200 == 0:
+                gc.collect()
 
-        return np.ascontiguousarray(np.vstack(embeddings), dtype="float32")
+        return out
+
+    def embed_and_save(self, output_dir: str = ".", show_progress: bool = True):
+        """STAGE 1, MEMORY-BOUNDED: embed straight into a memory-mapped .npy on
+        disk. Unlike generate_embeddings(), the full embedding matrix is NEVER
+        resident in RAM — only one batch at a time. Essential on <=64 GB Macs,
+        where a 3M-chunk matrix (~5 GB) plus the model plus MPS churn is enough
+        to tip the machine into swap. Writes metadata + returns the .npy path."""
+        import gc
+        from numpy.lib.format import open_memmap
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        emb_path = output_dir / "alexandria_embeddings.npy"
+        meta_path = output_dir / "alexandria_metadata.json"
+
+        n = len(self.chunks)
+        if n == 0:
+            print("No chunks to embed.")
+            np.save(emb_path, np.empty((0, self.embedding_dim), dtype="float32"))
+            meta_path.write_text(json.dumps(self.metadata))
+            return emb_path
+
+        print(f"\nStreaming embeddings for {n} chunks → {emb_path.name} (memory-bounded)...")
+        _log_rss("embed start")
+        mm = open_memmap(emb_path, mode="w+", dtype="float32",
+                         shape=(n, self.embedding_dim))
+
+        # MPS memory management: empty_cache hands each batch's buffers back to
+        # the allocator; synchronize forces the GPU queue to drain so nothing
+        # lingers. Both are no-ops on CPU.
+        mps_flush = None
+        mps_sync = None
+        try:
+            import torch
+            if getattr(self.model, "device", None) is not None and \
+               str(self.model.device).startswith("mps"):
+                if hasattr(getattr(torch, "mps", None), "empty_cache"):
+                    mps_flush = torch.mps.empty_cache
+                if hasattr(getattr(torch, "mps", None), "synchronize"):
+                    mps_sync = torch.mps.synchronize
+        except Exception:
+            pass
+
+        # RSS watchdog: hard insurance so a runaway (MPS or otherwise) can NEVER
+        # freeze the Mac again. Warn at ALEX_RSS_WARN_GB, abort gracefully at
+        # ALEX_RSS_ABORT_GB. Defaults sized for a 48 GB machine; a clean MPS embed
+        # peaks well under the warn line, so these should never trip in practice.
+        warn_gb = float(os.environ.get("ALEX_RSS_WARN_GB", "30"))
+        abort_gb = float(os.environ.get("ALEX_RSS_ABORT_GB", "42"))
+        warned = False
+
+        it = tqdm(range(0, n, self.batch_size)) if show_progress else range(0, n, self.batch_size)
+        for step, i in enumerate(it):
+            batch = self.chunks[i : i + self.batch_size]
+            _b = [self.doc_prefix + c for c in batch] if self.doc_prefix else batch
+            be = self.model.encode(_b, convert_to_numpy=True,
+                                   show_progress_bar=False, normalize_embeddings=True)
+            mm[i : i + len(batch)] = be           # write straight to disk
+            del be
+            if mps_flush is not None:
+                mps_flush()
+            if step % 50 == 0 and mps_sync is not None:
+                mps_sync()                         # drain the GPU queue
+            if step % 100 == 0:
+                mm.flush(); gc.collect()
+            # Emit a parseable progress line the GUI can read, so the bar MOVES
+            # during the long embed instead of sitting at the cached-extraction
+            # number (which looks frozen and tempts a fatal second click).
+            if step % 40 == 0:
+                done = min(i + self.batch_size, n)
+                print(f"  embedded {done:,}/{n:,} chunks", flush=True)
+                g = _log_rss(f"embed {done:,}/{n:,}")
+                if g >= 0 and g >= warn_gb and not warned:
+                    print(f"  ⚠ RSS {g:.1f} GB is above the {warn_gb:.0f} GB warn line "
+                          f"— watching closely.", flush=True)
+                    warned = True
+                if g >= 0 and g >= abort_gb:
+                    mm.flush(); del mm; gc.collect()
+                    raise MemoryError(
+                        f"RSS {g:.1f} GB exceeded ALEX_RSS_ABORT_GB={abort_gb:.0f} GB; "
+                        f"aborting the embed to protect the machine. The partial "
+                        f".npy was flushed; rerun (or set ALEX_EMBED_DEVICE=cpu).")
+
+        mm.flush()
+        del mm                                     # close the memmap
+        meta_path.write_text(json.dumps(self.metadata))
+        print(f"✓ Embeddings streamed to {emb_path} ({n} x {self.embedding_dim})")
+        print(f"✓ Metadata saved to {meta_path}")
+        return emb_path
 
     def save_embeddings(self, embeddings: np.ndarray, output_dir: str = "."):
         """Persist the embedding matrix + metadata so a SEPARATE, torch-free
@@ -1633,17 +2079,61 @@ def scan_books(directory: str, pdf_only: bool = True) -> List[Tuple[str, str]]:
 
     print(f"Scanning {directory} for {file_type_desc}...")
 
+    # Working trees that live under the library root but are NOT library books.
+    # Without this, rglob sweeps in the pre-optimisation quarantine copies, and
+    # every book that was repaired or OCR'd gets indexed twice -- once as the
+    # searchable version and once as its damaged predecessor.
+    SKIP_DIR_NAMES = {
+        "_Optimization", "_retired", "_originals_pre_optimization",
+        ".ocrwork", ".textcache", "_gaveston_page_scans",
+    }
+
+    # Files whose text layer is unreadable glyph codes. Indexing them injects
+    # nonsense tokens that look like real content to the retriever.
+    excluded = set()
+    _cands = [Path(__file__).resolve().parent / "index_exclude.txt",
+              directory / "_Optimization" / "index_exclude.txt",
+              directory / "PDF" / "_Optimization" / "index_exclude.txt",
+              directory.parent / "PDF" / "_Optimization" / "index_exclude.txt"]
+    for cand in _cands:
+        if cand.exists():
+            for line in cand.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    excluded.add(os.path.realpath(line))
+            print(f"  exclude list: {cand} ({len(excluded)} file(s))")
+
+    skipped_dirs = skipped_excluded = 0
+    seen = set()
     for ext in extensions:
         for file_path in directory.rglob(ext):
+            if SKIP_DIR_NAMES.intersection(file_path.parts):
+                skipped_dirs += 1
+                continue
+            real = os.path.realpath(str(file_path))
+            if real in excluded:
+                skipped_excluded += 1
+                continue
+            if real in seen:          # same file reached by two paths
+                continue
+            seen.add(real)
             books.append((str(file_path), file_path.stem))
+
+    if skipped_dirs:
+        print(f"  skipped {skipped_dirs} file(s) in working/quarantine directories")
+    if skipped_excluded:
+        print(f"  skipped {skipped_excluded} file(s) on the exclude list")
+    print(f"  {len(books)} book(s) to index")
 
     return books
 
 
-def run_incremental(args, cache_dir):
+def run_incremental(args, cache_dir, dry_run=False):
     """Update the index in place: re-embed only added/changed books, drop removed
-    ones, and rebuild the FAISS index keeping its tuned parameters."""
-    import subprocess
+    ones, and rebuild the FAISS index keeping its tuned parameters.
+
+    dry_run=True: report health + the pending diff and EXIT without embedding."""
+    import subprocess, gc
     import faiss
     from extract_text import _sig, read_cached_text, is_cached, extract_one
 
@@ -1658,16 +2148,37 @@ def run_incremental(args, cache_dir):
 
     with open(meta_path) as f:
         metadata = json.load(f)
-    index = faiss.read_index(str(index_path))
-    try:
-        index.make_direct_map()
-    except Exception:
-        pass
-    existing = np.ascontiguousarray(index.reconstruct_n(0, index.ntotal), dtype="float32")
+    emb_path = out / "alexandria_embeddings.npy"
+    forced = set()
+    if emb_path.exists():
+        # Common path: the streamed .npy exists — memmap it (nothing resident) and
+        # DON'T load the 4.7 GB FAISS index at all; we rebuild it from the .npy.
+        existing = np.load(emb_path, mmap_mode="r")
+    else:
+        # Fallback only: no .npy on disk, so reconstruct exact vectors from the
+        # index, then free the index immediately (it's ~4.7 GB and unused after).
+        index = faiss.read_index(str(index_path))
+        try:
+            index.make_direct_map()
+        except Exception:
+            pass
+        existing = np.ascontiguousarray(index.reconstruct_n(0, index.ntotal), dtype="float32")
+        del index
+        gc.collect()
     if len(metadata) != existing.shape[0]:
-        print(f"⚠ metadata ({len(metadata)}) and index ({existing.shape[0]}) are out of "
-              f"sync — do a full re-index instead.")
-        return 1
+        if len(metadata) > existing.shape[0]:
+            # Self-heal: tail metadata rows were written without vectors
+            # (an extraction ran without the embedding stage). Drop the tail
+            # rows and force their files through re-embedding.
+            tail = metadata[existing.shape[0]:]
+            forced = {m["file"] for m in tail}
+            print(f"⚠ self-heal: {len(tail)} metadata rows have no vectors "
+                  f"({len(forced)} file(s)) — re-embedding them.")
+            metadata = metadata[:existing.shape[0]]
+        else:
+            print(f"⚠ vectors ({existing.shape[0]}) exceed metadata "
+                  f"({len(metadata)}) — cannot self-heal; do a full re-index.")
+            return 1
 
     # Diff disk against what's indexed
     books = scan_books(args.input, pdf_only=not args.include_epub)
@@ -1688,8 +2199,44 @@ def run_incremental(args, cache_dir):
                 changed.add(fp)
         except OSError:
             pass
-    reprocess = added | changed
-    drop = removed | changed
+    reprocess = added | changed | forced
+    drop = removed | changed | forced
+
+    # ── --dry-run: health + pending-diff report, no embedding ──────────────
+    if dry_run:
+        lock = out / ".indexing.lock"
+        lock_note = "absent (clear)"
+        if lock.exists():
+            try:
+                holder = int((lock.read_text().strip() or "0"))
+            except Exception:
+                holder = 0
+            lock_note = (f"PRESENT, held by LIVE pid {holder}" if _pid_alive(holder)
+                         else f"PRESENT but STALE (pid {holder} gone) — delete: rm '{lock}'")
+        print("\n=== incremental dry-run ===")
+        print(f"  metadata rows      : {len(metadata):,}")
+        print(f"  embedding vectors  : {existing.shape[0]:,}  "
+              f"({'.npy on disk' if emb_path.exists() else 'reconstructed from index'})")
+        print(f"  alignment          : {'OK' if len(metadata) == existing.shape[0] else 'MISMATCH'}"
+              + ("" if len(metadata) == existing.shape[0] else "  ← would block the rebuild"))
+        print(f"  manifest present   : {'yes' if manifest_path.exists() else 'NO (changed-file detection disabled until next full build)'}")
+        print(f"  indexing lock      : {lock_note}")
+        print(f"  books on disk      : {len(on_disk):,}")
+        print(f"  → would ADD        : {len(added):,}")
+        print(f"  → would re-embed CHANGED: {len(changed):,}")
+        print(f"  → would REMOVE     : {len(removed):,}")
+        if forced:
+            print(f"  → self-heal re-embed: {len(forced):,} file(s) whose metadata had no vectors")
+        for label, s in (("add", added), ("changed", changed), ("remove", removed)):
+            for fp in list(sorted(s))[:5]:
+                print(f"      [{label}] {fp}")
+        verdict = ("nothing to do — index is up to date" if not reprocess and not removed
+                   else "healthy — a real run would process the above")
+        if len(metadata) != existing.shape[0] and not forced:
+            verdict = "BLOCKED — vector/metadata mismatch; run a full rebuild"
+        print(f"  VERDICT: {verdict}")
+        print("=== end dry-run (nothing was embedded) ===\n")
+        return 0
 
     if not reprocess and not removed:
         print("✓ Index already up to date — nothing added, changed or removed.")
@@ -1718,15 +2265,26 @@ def run_incremental(args, cache_dir):
             add_emb = indexer.generate_embeddings()
             add_meta = indexer.metadata
 
-    new_emb = np.vstack([keep_emb, add_emb]) if add_emb.shape[0] else keep_emb
-    new_emb = np.ascontiguousarray(new_emb, dtype="float32")
+    # Concatenate kept + newly-embedded vectors. np.vstack already returns a
+    # contiguous C-ordered float32 array (both inputs are float32), and fancy
+    # indexing (existing[keep_mask]) is contiguous too — so the old extra
+    # np.ascontiguousarray() was a needless third full copy of a ~5 GB matrix.
+    if add_emb.shape[0]:
+        new_emb = np.vstack([keep_emb, add_emb])
+        del keep_emb
+        gc.collect()
+    else:
+        new_emb = np.ascontiguousarray(keep_emb, dtype="float32")
     new_meta = keep_meta + add_meta
 
     np.save(out / "alexandria_embeddings.npy", new_emb)
+    total_rows = new_emb.shape[0]
+    del new_emb                        # free ~5 GB before the build subprocess
+    gc.collect()
     with open(meta_path, "w") as f:
         json.dump(new_meta, f)
     write_manifest(out, new_meta)
-    print(f"✓ Updated: {new_emb.shape[0]} chunks total "
+    print(f"✓ Updated: {total_rows} chunks total "
           f"({len(keep_meta)} kept, {len(add_meta)} newly embedded)")
 
     # Rebuild the FAISS index torch-free, preserving the tuned parameters
@@ -1740,6 +2298,68 @@ def run_incremental(args, cache_dir):
             "--nprobe", str(params.get("nprobe", 128))]
     print("Rebuilding index (torch-free, preserving tuned params)...")
     return subprocess.call(bcmd)
+
+
+_LOCK_PATH = None
+
+
+def _pid_alive(pid):
+    if not pid:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True          # exists but owned by another user → treat as alive
+
+
+def _acquire_index_lock(index_dir):
+    """Create index_dir/.indexing.lock unless a LIVE process already holds it.
+    Returns True on success. Guards CLI and GUI alike (the GUI shells out to
+    this same script), so only one embed can run per index at a time."""
+    global _LOCK_PATH
+    import atexit
+    lock = Path(index_dir) / ".indexing.lock"
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        # O_CREAT|O_EXCL is ATOMIC: exactly one process can create the file. Two
+        # embeds spawned milliseconds apart can no longer both "win" — the loser
+        # gets FileExistsError. (The old exists()-then-write() raced and let both
+        # through; that is what put two embeds on a 48 GB Mac.) We deliberately do
+        # NOT auto-reclaim stale locks — that reintroduces a delete/create race.
+        fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+        os.write(fd, str(os.getpid()).encode())
+        os.close(fd)
+        _LOCK_PATH = lock
+        atexit.register(_release_index_lock)
+        return True
+    except FileExistsError:
+        try:
+            holder = int((lock.read_text().strip() or "0"))
+        except Exception:
+            holder = 0
+        if _pid_alive(holder):
+            print(f"\n⚠ Another indexing run is already active (PID {holder}).")
+            print("  Refusing to start a second — two concurrent embeds exhaust RAM.")
+        else:
+            print(f"\n⚠ A stale lock from a hard-killed run is present (PID {holder}, gone).")
+            print(f"  Delete it, then retry:\n    rm '{lock}'")
+        return False
+
+
+def _release_index_lock():
+    """Remove the lock, but only if it is still OURS (never delete a live
+    successor's lock)."""
+    global _LOCK_PATH
+    try:
+        if _LOCK_PATH and _LOCK_PATH.exists() and \
+           _LOCK_PATH.read_text().strip() == str(os.getpid()):
+            _LOCK_PATH.unlink()
+    except Exception:
+        pass
+    _LOCK_PATH = None
 
 
 def main():
@@ -1774,17 +2394,33 @@ def main():
                         help="Only process books that were ADDED, CHANGED or REMOVED since "
                              "the last index, re-embedding just those, then rebuild the index "
                              "(keeping its tuned nlist/nprobe/metric). Fast for small updates.")
+    parser.add_argument("--dry-run", action="store_true", default=False,
+                        help="With --incremental: report health (manifest/.npy present, "
+                             "vector↔metadata alignment, stale lock) and exactly what WOULD be "
+                             "added/changed/removed, then EXIT without embedding. Diagnostic only.")
 
     args = parser.parse_args()
     cache_dir = args.cache_dir or str(Path(args.output) / "text_cache")
 
     if args.scan_only:
         # Delegate to the standalone torch-free scanner so worker processes stay
-        # light (no torch/faiss) and fast.
+        # light (no torch/faiss) and fast. No lock — it doesn't embed.
         import subprocess
         script = Path(__file__).parent / "scan_pdfs.py"
         cmd = [sys.executable, str(script), "--input", args.input, "--output", args.output]
         return subprocess.call(cmd)
+
+    # --dry-run diagnostic: read-only, embeds nothing, so it takes NO lock (and
+    # reports whether a lock is present as part of its health check).
+    if args.incremental and args.dry_run:
+        return run_incremental(args, cache_dir, dry_run=True)
+
+    # Cross-process lock: refuse to start if another embed (CLI *or* GUI) is
+    # already running against this index dir. Two concurrent embeds OOM a 48 GB
+    # Mac (observed: two 25 GB Python processes). Stale locks (from a hard kill)
+    # are detected via PID liveness and overwritten.
+    if not _acquire_index_lock(args.output):
+        return 1
 
     if args.incremental:
         return run_incremental(args, cache_dir)
@@ -1853,41 +2489,68 @@ def main():
     write_problem_report(args.output)
 
     if args.embeddings_only:
-        # STAGE 1 only: save embeddings + metadata, then exit so torch (and its
-        # OpenMP runtime) is gone before build_index_cli.py constructs the index.
-        embeddings = indexer.generate_embeddings()
-        indexer.save_embeddings(embeddings, args.output)
+        # STAGE 1 only: stream embeddings + metadata to disk (memory-bounded),
+        # then exit so torch (and its OpenMP runtime) is gone before
+        # build_index_cli.py constructs the index.
+        indexer.embed_and_save(args.output)
         write_manifest(args.output, indexer.metadata)
+        write_embedding_meta(args.output, indexer)
         print("\n✓ Stage 1 complete. Now build the index torch-free, e.g.:")
         print(f"  python3 build_index_cli.py --index-dir {args.output} "
               f"--index-type ivfflat --from-npy {Path(args.output)/'alexandria_embeddings.npy'}")
         return
 
-    # Default: build + save a Flat index in-process (safe; no parallel build)
-    indexer.build_index()
-    indexer.save(args.output)
+    # Default full build — MEMORY-BOUNDED, identical to the GUI path:
+    #   (1) STREAM embeddings to disk (the matrix is never resident in RAM), then
+    #   (2) build the tuned index in a SEPARATE torch-free process.
+    # This removes the last way to trigger the old in-process ~24 GB build that
+    # OOM'd a 48 GB Mac. There is no longer a code path that holds the whole
+    # embedding matrix in RAM.
+    import subprocess, gc
+    indexer.embed_and_save(args.output)
     write_manifest(args.output, indexer.metadata)
+    write_embedding_meta(args.output, indexer)
 
-    # Report on duplicate detection if enabled
-    if args.detect_duplicates and indexer.duplicate_detector:
-        duplicates = indexer.duplicate_detector.suspected_duplicates
-        if duplicates:
-            print(f"\n⚠ Found {len(duplicates)} potential duplicate(s):")
-            for i, dup in enumerate(duplicates, 1):
-                print(f"\n  Duplicate {i}:")
-                print(f"    File: {Path(dup['new_file']).name}")
-                print(f"    Matches: {Path(dup['existing_file']).name}")
-                print(f"    Similarity: {dup['similarity']:.1%}")
-            print(f"\n  See duplicate_detection_report.json for full details.")
-        else:
-            print("\n✓ No duplicates detected!")
+    # Release the ~4 GB of chunk text now that it's embedded and on disk, BEFORE
+    # the torch-free build subprocess loads the .npy and constructs the index.
+    # Otherwise the parent holds all chunks resident while the child needs ~10 GB.
+    indexer.chunks = []
+    if not indexer.duplicate_detector:      # dup-detection still needs the paths
+        indexer.document_file_paths = []
+    gc.collect()
+    _log_rss("after embed, chunks freed")
 
-    print("\n✓ Indexing complete!")
+    # Optional duplicate detection reads the on-disk embeddings via mmap
+    # (small slices), never a resident copy.
+    if indexer.duplicate_detector:
+        print("\nComputing document embeddings for duplicate detection...")
+        emb_mm = np.load(Path(args.output) / "alexandria_embeddings.npy", mmap_mode="r")
+        indexer._compute_document_signatures(emb_mm)
+        dups = indexer.duplicate_detector.suspected_duplicates
+        msg = f"⚠ {len(dups)} potential duplicate(s) — see report" if dups else "✓ No duplicates detected"
+        print(f"  {msg}")
+        indexer.duplicate_detector.save_report(
+            str(Path(args.output) / "duplicate_detection_report.json"))
+
+    # Build the tuned index torch-free (IVFFlat, nprobe 128), preserving any
+    # saved index_params.json.
+    params_path = Path(args.output) / "index_params.json"
+    params = json.loads(params_path.read_text()) if params_path.exists() else {}
+    bcmd = [sys.executable, str(Path(__file__).parent / "build_index_cli.py"),
+            "--index-dir", str(args.output),
+            "--index-type", params.get("index_type", "ivfflat"),
+            "--metric", params.get("metric", "ip"),
+            "--from-npy", str(Path(args.output) / "alexandria_embeddings.npy"),
+            "--nlist", str(params.get("nlist", 1024)),
+            "--nprobe", str(params.get("nprobe", 128))]
+    print("\nBuilding index (torch-free subprocess, tuned params)...")
+    rc = subprocess.call(bcmd)
+    print("\n✓ Indexing complete! (memory-bounded, IVFFlat, nprobe 128)"
+          if rc == 0 else f"\n⚠ Index build subprocess exited {rc}.")
 
 
 if __name__ == "__main__":
     main()
-
 ```
 
 ### `app.py`
@@ -1900,6 +2563,7 @@ Management dashboard for semantic search across your book collection.
 """
 
 import os
+import re
 import sys
 import json
 import subprocess
@@ -1990,6 +2654,17 @@ def load_querier(index_dir='.'):
     except Exception as e:
         print(f"Error loading querier: {e}")
         return False
+
+
+def _free_querier():
+    """Drop the in-memory index + metadata (~8 GB) and force a GC. Called before
+    a rebuild/update so the loaded copy doesn't compete for RAM with the build
+    subprocesses; the querier is reloaded from disk once the build completes."""
+    import gc
+    if STATE.get('querier') is not None:
+        STATE['querier'] = None
+        gc.collect()
+        print("✓ Released loaded index for the duration of the build (~8 GB freed)")
 
 
 def get_index_stats():
@@ -2141,8 +2816,14 @@ def api_start_indexing():
         output_dir = data.get('output_dir', '.')
         model = data.get('model', 'all-MiniLM-L6-v2')
 
-        if STATE['indexing']:
-            return jsonify({'error': 'Indexing already in progress'}), 400
+        # Atomic check-and-claim: without holding LOCK across BOTH the test and
+        # the set, two near-simultaneous clicks can each pass the test before
+        # either marks indexing started — spawning two full embeds at once
+        # (observed: two 25 GB Python processes → OOM on a 48 GB Mac).
+        with LOCK:
+            if STATE['indexing']:
+                return jsonify({'error': 'Indexing already in progress'}), 400
+            STATE['indexing'] = True   # claim the slot before releasing the lock
 
         # Start indexing in background thread
         thread = threading.Thread(
@@ -2166,6 +2847,11 @@ def run_indexing(books_dir, output_dir, model):
         STATE['progress_message'] = 'Initializing...'
         STATE['books_dir'] = books_dir
         STATE['index_dir'] = output_dir
+
+    # Release the currently-loaded index (~8 GB: FAISS index + metadata) while the
+    # rebuild subprocesses run — they need the RAM and would otherwise compete with
+    # a stale copy this server no longer uses. Reloaded from disk when we finish.
+    _free_querier()
 
     try:
         # Scan books
@@ -2209,45 +2895,70 @@ def run_indexing(books_dir, output_dir, model):
                     pass
         proc.wait()
 
-        # Read cached text, chunk, embed
-        from extract_text import read_cached_text, is_cached
-        indexer = RAGIndexer(model_name=model)
-        extractor = BookExtractor()
-        PROBLEM_PDFS.clear()
-
-        STATE['progress_message'] = 'Chunking...'
+        # ── STAGE 1: chunk + embed in an ISOLATED subprocess ───────────────
+        # index_books.py --embeddings-only reads the cache we just built, chunks,
+        # and embeds with the memory-safe path (preallocated matrix + MPS cache
+        # flush + thread caps). Running it as a subprocess means a heavy embed
+        # CANNOT take down this web server, memory is isolated, and it always
+        # uses the current code — no rag-ui restart needed after an edit.
+        STATE['progress_message'] = 'Embedding (isolated subprocess)...'
         STATE['progress'] = 62
-        for file_path, title in books:
-            if is_cached(cache_dir, file_path):
-                text = read_cached_text(cache_dir, file_path)
-            elif file_path.lower().endswith('.pdf'):
-                text = extractor.extract_pdf(file_path)
-            elif file_path.lower().endswith('.epub'):
-                text = extractor.extract_epub(file_path)
-            else:
-                continue
-            if text:
-                indexer.add_document(file_path, text, {'file': file_path, 'title': title})
+        ib = Path(__file__).parent / 'index_books.py'
+        emb_cmd = [sys.executable, str(ib), '--input', books_dir,
+                   '--output', output_dir, '--cache-dir', cache_dir,
+                   '--model', model, '--embeddings-only', '--no-parallel-extract']
+        proc = subprocess.Popen(emb_cmd, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True,
+                                cwd=str(Path(__file__).parent), env=child_env)
+        for line in proc.stdout:
+            line = line.rstrip()
+            if line:
+                STATE['progress_message'] = line
+                # "embedded X/N chunks" → advance the bar 62..82 so it visibly
+                # moves through the long embed (prevents the "looks stuck → click
+                # again → two embeds" trap).
+                m = re.search(r'embedded ([\d,]+)/([\d,]+) chunks', line)
+                if m:
+                    done = int(m.group(1).replace(',', ''))
+                    tot = int(m.group(2).replace(',', '')) or 1
+                    STATE['progress'] = 62 + int(done / tot * 20)
+        if proc.wait() != 0:
+            STATE['progress_message'] = 'Error: embedding subprocess failed (see terminal)'
+            return
 
-        # Embed (GPU) + build a Flat index in-process (safe; no parallel build)
-        STATE['progress_message'] = 'Generating embeddings (GPU)...'
-        STATE['progress'] = 70
-        indexer.build_index(show_progress=False)
+        # ── STAGE 2: build the tuned IVFFlat index, TORCH-FREE subprocess ───
+        # No torch here → no dual-OpenMP segfault; produces the IVF index the
+        # search side expects (nprobe 128), not a Flat one you'd rebuild later.
+        STATE['progress_message'] = 'Building IVFFlat index (torch-free)...'
+        STATE['progress'] = 84
+        params_path = Path(output_dir) / 'index_params.json'
+        params = json.loads(params_path.read_text()) if params_path.exists() else {}
+        bcli = Path(__file__).parent / 'build_index_cli.py'
+        b_cmd = [sys.executable, str(bcli), '--index-dir', output_dir,
+                 '--index-type', params.get('index_type', 'ivfflat'),
+                 '--metric', params.get('metric', 'ip'),
+                 '--from-npy', str(Path(output_dir) / 'alexandria_embeddings.npy'),
+                 '--nlist', str(params.get('nlist', 1024)),
+                 '--nprobe', str(params.get('nprobe', 128))]
+        bproc = subprocess.Popen(b_cmd, stdout=subprocess.PIPE,
+                                 stderr=subprocess.STDOUT, text=True,
+                                 cwd=str(Path(__file__).parent), env=child_env)
+        for line in bproc.stdout:
+            line = line.rstrip()
+            if line:
+                STATE['progress_message'] = line
+        if bproc.wait() != 0:
+            STATE['progress_message'] = 'Error: index build subprocess failed (see terminal)'
+            return
 
-        STATE['progress_message'] = 'Saving index...'
-        STATE['progress'] = 92
-        indexer.save(output_dir)
-        write_manifest(output_dir, indexer.metadata)
-        write_problem_report(output_dir)
-
+        # (the embedding subprocess already wrote problem_pdfs.txt)
         STATE['progress_message'] = 'Finalizing...'
         STATE['progress'] = 96
         STATE['index_dir'] = output_dir
         load_querier(output_dir)
 
         STATE['progress'] = 100
-        STATE['progress_message'] = ('Complete! Built a Flat index — go to Tuning → Rebuild Index '
-                                     'for the faster IVFFlat.')
+        STATE['progress_message'] = 'Complete! Built a tuned IVFFlat index (nprobe 128).'
 
     except Exception as e:
         STATE['progress_message'] = f'Error: {str(e)}'
@@ -2336,6 +3047,10 @@ def run_rebuild(opts):
         STATE['progress'] = 5
         STATE['progress_message'] = f"Starting {opts['index_type']} rebuild..."
 
+    # A rebuild reconstructs vectors from the live index in a child process; free
+    # our resident copy first so the two don't both hold the index (~4.7 GB each).
+    _free_querier()
+
     try:
         index_dir = STATE['index_dir']
         script = Path(__file__).parent / 'build_index_cli.py'
@@ -2344,12 +3059,17 @@ def run_rebuild(opts):
                '--index-type', opts['index_type'],
                '--metric', opts.get('metric', 'ip')]
 
-        # Prefer exact saved embeddings; otherwise reconstruct from the index.
+        # Reconstruct exact vectors from the LIVE index (always aligned with
+        # metadata after a healthy build). Use the saved .npy only when no
+        # index exists yet: a stale .npy silently scrambles the id->metadata
+        # mapping (observed 2026-07-22 and 2026-07-24), and build_index_cli.py
+        # now also hard-checks alignment as a second line of defense.
+        live_index = Path(index_dir) / 'alexandria.index'
         npy = Path(index_dir) / 'alexandria_embeddings.npy'
-        if npy.exists():
+        if live_index.exists():
+            cmd += ['--from-index', str(live_index)]
+        elif npy.exists():
             cmd += ['--from-npy', str(npy)]
-        else:
-            cmd += ['--from-index', str(Path(index_dir) / 'alexandria.index')]
 
         # Per-type parameters
         for flag, key in [('--nlist', 'nlist'), ('--nprobe', 'nprobe'),
@@ -2400,13 +3120,18 @@ def run_rebuild(opts):
 def api_rebuild_index():
     """Kick off a torch-free index rebuild with the chosen type + params."""
     try:
-        if STATE['indexing']:
-            return jsonify({'error': 'A build is already in progress'}), 400
-
         data = request.get_json() or {}
         index_type = data.get('index_type', 'ivfflat')
         if index_type not in ('flat', 'ivfflat', 'ivfpq', 'hnsw'):
             return jsonify({'error': f'Unknown index type: {index_type}'}), 400
+
+        # Atomic check-and-claim under LOCK: a plain check-then-start lets two fast
+        # clicks each spawn a build_index_cli process (~10 GB each). Claim the slot
+        # here so the second click is rejected. run_rebuild's finally releases it.
+        with LOCK:
+            if STATE.get('scanning') or STATE['indexing']:
+                return jsonify({'error': 'A scan or build is already in progress'}), 400
+            STATE['indexing'] = True
 
         opts = {
             'index_type': index_type,
@@ -2424,6 +3149,8 @@ def api_rebuild_index():
         return jsonify({'success': True, 'message': f'{index_type} rebuild started'})
 
     except Exception as e:
+        with LOCK:                       # release the slot if we claimed then failed
+            STATE['indexing'] = False
         return jsonify({'error': str(e)}), 500
 
 
@@ -2437,6 +3164,9 @@ def run_update():
     STATE['indexing'] = True
     STATE['progress'] = 0
     STATE['progress_message'] = 'Starting incremental update...'
+    # Incremental re-embeds only new/changed books but still rebuilds the index in
+    # a child; free our resident copy for the duration, reload when done.
+    _free_querier()
     try:
         ib = Path(__file__).parent / 'index_books.py'
         cmd = [sys.executable, str(ib), '--input', STATE['books_dir'],
@@ -2484,12 +3214,17 @@ def run_update():
 def api_update_index():
     """Start an incremental update (add new / changed / removed books)."""
     try:
-        if STATE.get('scanning') or STATE['indexing']:
-            return jsonify({'error': 'A scan, build or update is already running'}), 400
+        # Atomic check-and-claim so two clicks can't launch two updates.
+        with LOCK:
+            if STATE.get('scanning') or STATE['indexing']:
+                return jsonify({'error': 'A scan, build or update is already running'}), 400
+            STATE['indexing'] = True
         thread = threading.Thread(target=run_update, daemon=True)
         thread.start()
         return jsonify({'success': True, 'message': 'Incremental update started'})
     except Exception as e:
+        with LOCK:
+            STATE['indexing'] = False
         return jsonify({'error': str(e)}), 500
 
 
@@ -2497,14 +3232,22 @@ def api_update_index():
 # API Routes - PDF Health Check (torch-free scan subprocess)
 # ============================================================================
 
-def run_scan(books_dir, out_dir):
-    """Run scan_pdfs.py as a background subprocess and stream progress into STATE."""
+def run_scan(books_dir, out_dir, mode='incremental'):
+    """Run scan_pdfs.py as a background subprocess and stream progress into STATE.
+
+    mode: 'incremental' (skip unchanged per manifest, default),
+          'verify' (also re-hash unchanged files), 'full' (rescan everything).
+    """
     STATE['scanning'] = True
     STATE['scan_progress'] = 0
-    STATE['scan_message'] = 'Starting PDF scan...'
+    STATE['scan_message'] = f'Starting PDF scan ({mode})...'
     try:
         script = Path(__file__).parent / 'scan_pdfs.py'
         cmd = [sys.executable, str(script), '--input', books_dir, '--output', out_dir]
+        if mode == 'verify':
+            cmd.append('--verify')
+        elif mode == 'full':
+            cmd.append('--full')
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, text=True,
                                 cwd=str(Path(__file__).parent))
@@ -2538,15 +3281,24 @@ def run_scan(books_dir, out_dir):
 def api_scan_pdfs():
     """Start a background PDF integrity scan."""
     try:
-        if STATE.get('scanning') or STATE['indexing']:
-            return jsonify({'error': 'A scan or build is already running'}), 400
         data = request.get_json() or {}
         books_dir = data.get('books_dir') or STATE['books_dir']
+        mode = data.get('mode', 'incremental')
+        if mode not in ('incremental', 'verify', 'full'):
+            return jsonify({'error': f'Unknown scan mode: {mode}'}), 400
+        # Atomic check-and-claim so a scan can't overlap a build/update or a
+        # second scan (run_scan's finally clears the flag).
+        with LOCK:
+            if STATE.get('scanning') or STATE['indexing']:
+                return jsonify({'error': 'A scan or build is already running'}), 400
+            STATE['scanning'] = True
         out_dir = STATE['index_dir']
-        thread = threading.Thread(target=run_scan, args=(books_dir, out_dir), daemon=True)
+        thread = threading.Thread(target=run_scan, args=(books_dir, out_dir, mode), daemon=True)
         thread.start()
-        return jsonify({'success': True, 'message': 'PDF scan started', 'books_dir': books_dir})
+        return jsonify({'success': True, 'message': f'PDF scan started ({mode})', 'books_dir': books_dir})
     except Exception as e:
+        with LOCK:
+            STATE['scanning'] = False
         return jsonify({'error': str(e)}), 500
 
 
@@ -2595,6 +3347,41 @@ def api_index_stats():
     """Get index statistics."""
     stats = get_index_stats()
     return jsonify(stats)
+
+
+@app.route('/api/refresh-queues', methods=['POST'])
+def api_refresh_queues():
+    """Rebuild the work queues from what is actually on disk.
+
+    The queues were hand-maintained, so any book added after they were written
+    stayed invisible to every pass: 65 books sat with no text layer while the
+    OCR queue reported empty and success. This asks the library instead."""
+    try:
+        data = request.get_json(silent=True) or {}
+        do_apply = bool(data.get('apply'))
+        books_dir = Path(STATE['books_dir'])
+        script = books_dir / '_Optimization' / 'refresh_queues.py'
+        if not script.exists():
+            return jsonify({'error': f'refresh_queues.py not found at {script}'}), 404
+        cmd = [sys.executable, str(script)]
+        if do_apply:
+            # OCR queue only. Writing index_exclude.txt from a button would let
+            # one click remove 65 books from search with nothing reviewed.
+            cmd.append('--apply-ocr')
+        env = os.environ.copy()
+        env['ALEX_ROOT'] = str(books_dir)
+        env['ALEX_OUT'] = str(books_dir / '_Optimization')
+        # Prefer the native arm64 poppler; /usr/local is the x86_64 prefix and
+        # would run every pdfinfo/pdftotext under Rosetta.
+        env['PATH'] = '/opt/homebrew/bin:' + env.get('PATH', '')
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=2400, env=env)
+        return jsonify({'success': r.returncode == 0,
+                        'applied': do_apply,
+                        'output': (r.stdout + r.stderr)[-12000:]})
+    except subprocess.TimeoutExpired:
+        return jsonify({'error': 'refresh_queues.py exceeded 40 minutes'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/clear-index', methods=['POST'])
@@ -2750,8 +3537,9 @@ if __name__ == '__main__':
     # use_reloader=False prevents Flask from restarting when you click tabs
     # Bind to 127.0.0.1 directly — on this machine the 'localhost' hostname
     # doesn't resolve, so use the loopback IP.
+    # Port 5050, NOT 5000: macOS AirPlay Receiver (ControlCenter) listens on
+    # 5000 and launchd respawns it when killed. Moved 2026-07-02.
     app.run(debug=True, host='127.0.0.1', port=5050, use_reloader=False)
-
 ```
 
 ### `alexandria_mcp_server.py`
@@ -3569,11 +4357,25 @@ checkIndex();
     <div class="form-group">
         <label for="embedding-model">Embedding Model</label>
         <select id="embedding-model" class="form-select">
-            <option value="all-MiniLM-L6-v2" selected>all-MiniLM-L6-v2 (recommended)</option>
-            <option value="all-mpnet-base-v2">all-mpnet-base-v2 (higher quality, slower)</option>
-            <option value="all-roberta-large-v1">all-roberta-large-v1 (best quality, slowest)</option>
-        </select>
-        <p class="form-help">Model used for semantic embeddings. Larger = better quality but slower.</p>
+            <optgroup label="Multilingual - handles Greek, Latin, Hebrew, German, French">
+                <option value="intfloat/multilingual-e5-small" selected>multilingual-e5-small (384-dim, 512 tok, ~171/s - fastest, best cross-language)</option>
+                <option value="intfloat/multilingual-e5-base">multilingual-e5-base (768-dim, 512 tok, ~86/s)</option>
+                <option value="BAAI/bge-m3">bge-m3 (1024-dim, 8192 ctx, ~26/s - 18h for this corpus)</option>
+            </optgroup>
+            <optgroup label="English only">
+                <option value="all-MiniLM-L6-v2">all-MiniLM-L6-v2 (384-dim, 256 tok - cannot match Greek/Latin)</option>
+                <option value="all-mpnet-base-v2">all-mpnet-base-v2 (768-dim)</option>
+                <option value="all-roberta-large-v1">all-roberta-large-v1 (1024-dim, slowest)</option>
+            </optgroup>
+            </select>
+        <p class="form-help">
+            Changing the model requires re-embedding every book - vectors from
+            different models are not comparable. Measured on this machine:
+            e5-small 171/s (2.8h), e5-base 86/s (5.5h), bge-m3 26/s (18h).
+            Cross-language scores (Greek/Latin to English): e5-small 0.91/0.94,
+            bge-m3 0.88/0.83, all-MiniLM 0.12/0.17 - below the 0.3 similarity
+            threshold, which is why Greek and Latin never surfaced before.
+        </p>
     </div>
 
     <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
@@ -4073,7 +4875,6 @@ function escapeHtml(text) {
 }
 </script>
 {% endblock %}
-
 ```
 
 ### `templates/management.html`
@@ -4134,16 +4935,29 @@ function escapeHtml(text) {
         <div class="progress-bar"><div id="update-fill" class="progress-fill"></div></div>
         <p id="update-progress-msg" class="scan-progress-msg"></p>
     </div>
+    <div class="workflow-note">
+        <strong>⚠️ After the update finishes:</strong> the Claude MCP server keeps its own copy of
+        the index in memory — new books stay invisible to Claude's searches until you restart it.
+        Restart the Claude Desktop / Cowork session (which relaunches the MCP server), then ask
+        Claude to search for one of the new books to confirm. This web UI picks up the new index
+        on its own.
+    </div>
 </div>
 
 <!-- PDF Health Check -->
 <div class="section">
     <h2>🩺 PDF Health Check</h2>
     <p class="section-description">
-        Scan every PDF for corrupted streams (the "Data-loss while decompressing" issue) without
-        re-indexing. Runs torch-free across your CPU cores — about 12 minutes for ~3,800 books.
+        Scan PDFs for corrupted streams (the "Data-loss while decompressing" issue) without
+        re-indexing. Incremental: unchanged files (per <code>scan_manifest.json</code>) are skipped,
+        so after the first full run only new or changed files get scanned — seconds, not minutes.
         Results are written to <code>problem_pdfs.txt</code>.
     </p>
+    <select id="scan-mode" style="margin-right:0.5rem;">
+        <option value="incremental" selected>Incremental — new/changed files only</option>
+        <option value="verify">Verify — also re-hash unchanged files</option>
+        <option value="full">Full — rescan everything</option>
+    </select>
     <button id="scan-btn" class="btn btn-secondary">🩺 Scan Library</button>
     <span id="scan-status-msg" class="scan-msg"></span>
 
@@ -4153,6 +4967,40 @@ function escapeHtml(text) {
     </div>
 
     <div id="scan-results" class="hidden" style="margin-top:1rem;"></div>
+    <div class="workflow-note">
+        <strong>Typical session:</strong> added books? → <em>Update Index</em> (then restart the
+        MCP server — see above). Want a corruption check? → <em>Scan Library</em> on Incremental.
+        The first incremental scan builds <code>scan_manifest.json</code> (~12 min); after that it
+        only scans new/changed files — seconds. <em>Verify</em> re-hashes unchanged files to catch
+        silent replacements (use after restoring from backup). <em>Full</em> ignores the manifest.
+    </div>
+</div>
+
+
+<!-- Queue Refresh -->
+<div class="section">
+    <h2>&#128260; Refresh Work Queues</h2>
+    <p class="section-description">
+        Rebuild the OCR and exclude queues from what is actually on disk. The
+        queues were hand-maintained, so any book added afterwards was never
+        considered by any pass &mdash; 65 books sat with no text layer while the
+        OCR queue reported empty. This asks the library instead of a stale list.
+        Takes about a minute. Run it whenever you add books.
+    </p>
+    <button id="refresh-queues-btn" class="btn btn-secondary">&#128260; Check Queues</button>
+    <button id="apply-ocr-btn" class="btn btn-secondary" disabled>&#10133; Add missing books to OCR queue</button>
+    <span id="refresh-queues-msg" class="scan-msg"></span>
+    <pre id="refresh-queues-out" class="hidden"
+         style="margin-top:1rem;padding:0.75rem;background:#111;color:#ddd;
+                border-radius:6px;max-height:420px;overflow:auto;
+                font-size:0.8rem;line-height:1.35;white-space:pre-wrap;"></pre>
+    <div class="workflow-note">
+        <strong>Check</strong> is read-only. <strong>Add missing books</strong> writes
+        <code>list_ocr.txt</code> only &mdash; safe, because OCR adds a text layer and a
+        file that turns out not to need one is rejected. The exclude list is
+        <em>not</em> written from here: removing books from search deserves a look at
+        <code>junk_candidates.txt</code> first.
+    </div>
 </div>
 
 <!-- Danger Zone -->
@@ -4226,6 +5074,17 @@ function escapeHtml(text) {
     color: #666;
     margin-bottom: 1rem;
     font-size: 0.95rem;
+}
+
+.workflow-note {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    background: #fdf6e3;
+    border-left: 4px solid #e0b040;
+    border-radius: 4px;
+    color: #555;
+    font-size: 0.9rem;
+    line-height: 1.5;
 }
 
 .stats-table {
@@ -4536,13 +5395,19 @@ async function pollUpdate() {
 const scanBtn = document.getElementById('scan-btn');
 
 scanBtn.addEventListener('click', async () => {
-    if (!confirm('Scan every PDF for corruption? This runs in the background (~12 min for a large library).')) return;
+    const mode = document.getElementById('scan-mode').value;
+    const warn = mode === 'incremental'
+        ? 'Scan new/changed PDFs for corruption? (First-ever run scans everything; after that, seconds.)'
+        : mode === 'verify'
+            ? 'Verify scan: re-hashes every file to catch silent replacements. Slower than incremental.'
+            : 'Full scan: every PDF, ignoring the manifest (~12+ min for a large library). Continue?';
+    if (!confirm(warn)) return;
     scanBtn.disabled = true;
     document.getElementById('scan-results').classList.add('hidden');
     document.getElementById('scan-progress-wrap').classList.remove('hidden');
     document.getElementById('scan-status-msg').textContent = ' starting…';
     try {
-        const r = await fetch('/api/scan-pdfs', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+        const r = await fetch('/api/scan-pdfs', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({mode}) });
         const d = await r.json();
         if (d.error) { alert(d.error); resetScan(); return; }
         document.getElementById('scan-status-msg').textContent = ' scanning ' + (d.books_dir || '');
@@ -4594,11 +5459,47 @@ async function loadScanResults() {
 // Load stats on page load
 updateStats();
 
+
+// ---- Refresh work queues -------------------------------------------------
+async function runRefreshQueues(apply) {
+    const btn  = document.getElementById('refresh-queues-btn');
+    const ocr  = document.getElementById('apply-ocr-btn');
+    const msg  = document.getElementById('refresh-queues-msg');
+    const out  = document.getElementById('refresh-queues-out');
+    btn.disabled = true; ocr.disabled = true;
+    msg.textContent = apply ? 'Writing OCR queue...' : 'Probing every PDF (about a minute)...';
+    out.classList.remove('hidden');
+    out.textContent = '';
+    try {
+        const r = await fetch('/api/refresh-queues', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({apply: apply})
+        });
+        const d = await r.json();
+        out.textContent = d.output || d.error || '(no output)';
+        if (d.error) { msg.textContent = 'Failed'; }
+        else {
+            msg.textContent = apply ? 'OCR queue updated' : 'Done';
+            // only offer the write once a dry run has shown what it would do
+            ocr.disabled = apply;
+        }
+    } catch (e) {
+        msg.textContent = 'Failed';
+        out.textContent = String(e);
+    } finally {
+        btn.disabled = false;
+    }
+}
+document.getElementById('refresh-queues-btn')
+        .addEventListener('click', () => runRefreshQueues(false));
+document.getElementById('apply-ocr-btn')
+        .addEventListener('click', () => runRefreshQueues(true));
+
 // Refresh stats every 30 seconds
 setInterval(updateStats, 30000);
 </script>
 {% endblock %}
-
 ```
 
 ### `templates/tuning.html`

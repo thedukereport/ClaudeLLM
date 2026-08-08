@@ -120,6 +120,63 @@ def write_problem_report(output_dir: str = "."):
 # tokens, so the model would silently truncate the last ~25%. 200 words keeps
 # each chunk at/under the model limit so the whole chunk actually gets embedded.
 CHUNK_SIZE = 200  # words per chunk (kept under the 256-token model limit)
+
+# Long-context models make the 200-word ceiling pointless: it exists only
+# because MiniLM truncates at 256 subword tokens. 400 words (~520 tokens) fits
+# any 512+ token model, keeps an argument intact instead of splitting it mid
+# paragraph, and still localises a hit to roughly a page -- which matters when
+# the result has to support a footnote. Overridable with ALEX_CHUNK_WORDS.
+LONG_CONTEXT_CHUNK_SIZE = 400
+LONG_CONTEXT_OVERLAP = 80
+
+
+def prefixes_for(model_name: str) -> tuple:
+    """(document prefix, query prefix). The e5 family is TRAINED with these; omit
+    them and retrieval quality drops measurably. Both sides must agree, or the
+    query lands in a different region of the space than the passages."""
+    n = (model_name or "").lower()
+    if "e5" in n:
+        return "passage: ", "query: "
+    return "", ""
+
+
+def write_embedding_meta(output_dir, indexer):
+    """Record WHICH model built this index, beside the index itself.
+
+    Without this the querier defaults to all-MiniLM-L6-v2. multilingual-e5-small
+    is also 384-dim, so querying an e5 index with MiniLM raises no dimension
+    error -- it just returns quiet nonsense. This file is what prevents that."""
+    meta = {
+        "model": getattr(indexer, "model_name", None),
+        "dim": indexer.embedding_dim,
+        "doc_prefix": getattr(indexer, "doc_prefix", ""),
+        "query_prefix": getattr(indexer, "query_prefix", ""),
+        "max_seq_length": getattr(indexer.model, "max_seq_length", None),
+        "chunk_words": chunk_params_for(indexer.model)[0],
+    }
+    (Path(output_dir) / "embedding_model.json").write_text(json.dumps(meta, indent=2))
+    print(f"  recorded embedding model: {meta['model']} (dim {meta['dim']}, "
+          f"prefix {meta['doc_prefix']!r})", flush=True)
+
+
+def chunk_params_for(model) -> tuple:
+    """Pick (words, overlap) from the loaded model's real token limit, so that
+    switching models in the UI cannot silently mis-size chunks in either
+    direction."""
+    override = os.environ.get("ALEX_CHUNK_WORDS")
+    if override:
+        w = int(override)
+        return w, max(1, int(w * 0.2))
+    limit = getattr(model, "max_seq_length", 0) or 0
+    # ~1.4 subword tokens per whitespace word; leave headroom so a chunk's tail
+    # is never silently truncated. A 512-token model takes ~350 words, not the
+    # 400 a coarse threshold would have handed it.
+    if limit >= 2048:
+        return LONG_CONTEXT_CHUNK_SIZE, LONG_CONTEXT_OVERLAP
+    if limit >= 512:
+        w = int(limit / 1.45)
+        return w, max(1, int(w * 0.2))
+    return CHUNK_SIZE, CHUNK_OVERLAP
 CHUNK_OVERLAP = 40  # words of overlap between chunks
 MODEL_NAME = "all-MiniLM-L6-v2"  # Fast, effective, 384-dim embeddings
 BATCH_SIZE = 128  # Batch size for embedding generation
@@ -299,8 +356,29 @@ class RAGIndexer:
             except Exception:
                 device = "cpu"
         self.model = SentenceTransformer(model_name, device=device)
+        self.model_name = model_name
+        self.doc_prefix, self.query_prefix = prefixes_for(model_name)
         self.embedding_dim = self.model.get_sentence_embedding_dimension()
         self.batch_size = batch_size
+
+        # BATCH_SIZE=128 was tuned for MiniLM: 22M params, 384 dims, 256-token
+        # ceiling. A 568M-param 1024-dim model at that batch size drove a 48 GB
+        # machine to 59 GB resident and 39 GB of swap -- 11 s/batch of pure
+        # paging, a 40-hour ETA for work that takes well under an hour resident.
+        # Scale the batch to the model, and cap the sequence window to what we
+        # actually feed it (400-word chunks are ~520 tokens; 8192 is dead weight).
+        try:
+            if self.embedding_dim >= 1024:
+                self.batch_size = int(os.environ.get("ALEX_BATCH_SIZE", "16"))
+                if getattr(self.model, "max_seq_length", 0) > 1024:
+                    self.model.max_seq_length = int(
+                        os.environ.get("ALEX_MAX_SEQ", "1024"))
+            elif os.environ.get("ALEX_BATCH_SIZE"):
+                self.batch_size = int(os.environ["ALEX_BATCH_SIZE"])
+        except Exception:
+            pass
+        print(f"  batch_size={self.batch_size}  dim={self.embedding_dim}  "
+              f"max_seq={getattr(self.model, 'max_seq_length', '?')}", flush=True)
 
         # Cap torch's intra-op threads so embedding can't spawn a thread storm
         # (the crash showed load average 321). Safe if torch isn't present.
@@ -339,7 +417,8 @@ class RAGIndexer:
                   flush=True)
             text = text[:max_chars]
 
-        chunks = TextChunker.chunk_text(text)
+        _cw, _co = chunk_params_for(getattr(self, "model", None))
+        chunks = TextChunker.chunk_text(text, chunk_size=_cw, overlap=_co)
         for i, chunk in enumerate(chunks):
             self.chunks.append(chunk)
             self.document_file_paths.append(file_path)
@@ -390,8 +469,9 @@ class RAGIndexer:
         for step, i in enumerate(iterator):
             batch = self.chunks[i : i + self.batch_size]
             # normalize_embeddings=True → unit vectors, so inner product == cosine.
+            _b = [self.doc_prefix + c for c in batch] if self.doc_prefix else batch
             be = self.model.encode(
-                batch, convert_to_numpy=True, show_progress_bar=False,
+                _b, convert_to_numpy=True, show_progress_bar=False,
                 normalize_embeddings=True)
             out[i : i + len(batch)] = be
             del be
@@ -454,7 +534,8 @@ class RAGIndexer:
         it = tqdm(range(0, n, self.batch_size)) if show_progress else range(0, n, self.batch_size)
         for step, i in enumerate(it):
             batch = self.chunks[i : i + self.batch_size]
-            be = self.model.encode(batch, convert_to_numpy=True,
+            _b = [self.doc_prefix + c for c in batch] if self.doc_prefix else batch
+            be = self.model.encode(_b, convert_to_numpy=True,
                                    show_progress_bar=False, normalize_embeddings=True)
             mm[i : i + len(batch)] = be           # write straight to disk
             del be
@@ -618,9 +699,51 @@ def scan_books(directory: str, pdf_only: bool = True) -> List[Tuple[str, str]]:
 
     print(f"Scanning {directory} for {file_type_desc}...")
 
+    # Working trees that live under the library root but are NOT library books.
+    # Without this, rglob sweeps in the pre-optimisation quarantine copies, and
+    # every book that was repaired or OCR'd gets indexed twice -- once as the
+    # searchable version and once as its damaged predecessor.
+    SKIP_DIR_NAMES = {
+        "_Optimization", "_retired", "_originals_pre_optimization",
+        ".ocrwork", ".textcache", "_gaveston_page_scans",
+    }
+
+    # Files whose text layer is unreadable glyph codes. Indexing them injects
+    # nonsense tokens that look like real content to the retriever.
+    excluded = set()
+    _cands = [Path(__file__).resolve().parent / "index_exclude.txt",
+              directory / "_Optimization" / "index_exclude.txt",
+              directory / "PDF" / "_Optimization" / "index_exclude.txt",
+              directory.parent / "PDF" / "_Optimization" / "index_exclude.txt"]
+    for cand in _cands:
+        if cand.exists():
+            for line in cand.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    excluded.add(os.path.realpath(line))
+            print(f"  exclude list: {cand} ({len(excluded)} file(s))")
+
+    skipped_dirs = skipped_excluded = 0
+    seen = set()
     for ext in extensions:
         for file_path in directory.rglob(ext):
+            if SKIP_DIR_NAMES.intersection(file_path.parts):
+                skipped_dirs += 1
+                continue
+            real = os.path.realpath(str(file_path))
+            if real in excluded:
+                skipped_excluded += 1
+                continue
+            if real in seen:          # same file reached by two paths
+                continue
+            seen.add(real)
             books.append((str(file_path), file_path.stem))
+
+    if skipped_dirs:
+        print(f"  skipped {skipped_dirs} file(s) in working/quarantine directories")
+    if skipped_excluded:
+        print(f"  skipped {skipped_excluded} file(s) on the exclude list")
+    print(f"  {len(books)} book(s) to index")
 
     return books
 
@@ -991,6 +1114,7 @@ def main():
         # build_index_cli.py constructs the index.
         indexer.embed_and_save(args.output)
         write_manifest(args.output, indexer.metadata)
+        write_embedding_meta(args.output, indexer)
         print("\n✓ Stage 1 complete. Now build the index torch-free, e.g.:")
         print(f"  python3 build_index_cli.py --index-dir {args.output} "
               f"--index-type ivfflat --from-npy {Path(args.output)/'alexandria_embeddings.npy'}")
@@ -1005,6 +1129,7 @@ def main():
     import subprocess, gc
     indexer.embed_and_save(args.output)
     write_manifest(args.output, indexer.metadata)
+    write_embedding_meta(args.output, indexer)
 
     # Release the ~4 GB of chunk text now that it's embedded and on disk, BEFORE
     # the torch-free build subprocess loads the .npy and constructs the index.

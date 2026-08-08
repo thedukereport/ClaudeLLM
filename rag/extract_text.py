@@ -143,9 +143,32 @@ def _on_alarm(signum, frame):
 # A single malformed PDF can send pdfminer into an effectively infinite loop and
 # DEADLOCK the whole worker pool — one bad file freezes the entire index build
 # (observed 2026-07). Each worker runs one file on its main thread, so a SIGALRM
-# watchdog aborts that file after PER_FILE_TIMEOUT and records it as an error,
-# letting the run continue instead of hanging forever.
+# watchdog aborts that file and records it as an error, letting the run continue
+# instead of hanging forever.
+#
+# The limit has to scale with the book. A flat 90 seconds silently truncated
+# Michael L. Rodkinson's *New Edition of the Babylonian Talmud* — 2,437 pages,
+# 200 MB, 1,043,500 words — which pdfplumber cannot read anywhere near that fast.
+# What stayed in the cache was 20 KB of Google Books front matter, and that is
+# what got embedded: the book indexed, reported six chunks, appeared in the
+# library list, and would never have returned a passage. Nothing distinguished it
+# from a book that genuinely holds two thousand words (2026-08-08).
+#
+# Scaling by file size costs one stat and bounds the damage either way: a normal
+# book still gets the old 90-second floor, a 200 MB volume gets twenty minutes,
+# and a genuine infinite loop still dies at the ceiling.
 PER_FILE_TIMEOUT = int(os.environ.get("ALEX_EXTRACT_TIMEOUT", "90"))
+TIMEOUT_CEILING = int(os.environ.get("ALEX_EXTRACT_TIMEOUT_MAX", "1800"))
+SECONDS_PER_MB = float(os.environ.get("ALEX_EXTRACT_SECONDS_PER_MB", "6"))
+
+
+def timeout_for(path):
+    """Seconds to allow this file: the floor, or six seconds a megabyte, capped."""
+    try:
+        mb = os.path.getsize(path) / 1_000_000
+    except OSError:
+        return PER_FILE_TIMEOUT
+    return int(max(PER_FILE_TIMEOUT, min(TIMEOUT_CEILING, mb * SECONDS_PER_MB)))
 
 
 def extract_one(task):
@@ -158,9 +181,10 @@ def extract_one(task):
         low = path.lower()
         if not (low.endswith(".pdf") or low.endswith(".epub")):
             return (path, "skip", [])
+        budget = timeout_for(path)
         try:
             signal.signal(signal.SIGALRM, _on_alarm)
-            signal.alarm(PER_FILE_TIMEOUT)
+            signal.alarm(budget)
             armed = True
         except (ValueError, AttributeError):
             armed = False          # not on the main thread / unsupported platform
@@ -173,7 +197,9 @@ def extract_one(task):
         return (path, status, warns)
     except _ExtractTimeout:
         return (path, "error",
-                [f"timeout: extraction exceeded {PER_FILE_TIMEOUT}s (likely malformed PDF)"])
+                [f"timeout: extraction exceeded {budget}s "
+                 f"({os.path.getsize(path)/1e6:.0f} MB) — malformed, or raise "
+                 f"ALEX_EXTRACT_SECONDS_PER_MB"])
     except Exception as e:
         return (path, "error", [f"{type(e).__name__}: {e}"])
     finally:

@@ -37,11 +37,25 @@
     <div class="form-group">
         <label for="embedding-model">Embedding Model</label>
         <select id="embedding-model" class="form-select">
-            <option value="all-MiniLM-L6-v2" selected>all-MiniLM-L6-v2 (recommended)</option>
-            <option value="all-mpnet-base-v2">all-mpnet-base-v2 (higher quality, slower)</option>
-            <option value="all-roberta-large-v1">all-roberta-large-v1 (best quality, slowest)</option>
-        </select>
-        <p class="form-help">Model used for semantic embeddings. Larger = better quality but slower.</p>
+            <optgroup label="Multilingual - handles Greek, Latin, Hebrew, German, French">
+                <option value="intfloat/multilingual-e5-small" selected>multilingual-e5-small (384-dim, 512 tok, ~171/s - fastest, best cross-language)</option>
+                <option value="intfloat/multilingual-e5-base">multilingual-e5-base (768-dim, 512 tok, ~86/s)</option>
+                <option value="BAAI/bge-m3">bge-m3 (1024-dim, 8192 ctx, ~26/s - 18h for this corpus)</option>
+            </optgroup>
+            <optgroup label="English only">
+                <option value="all-MiniLM-L6-v2">all-MiniLM-L6-v2 (384-dim, 256 tok - cannot match Greek/Latin)</option>
+                <option value="all-mpnet-base-v2">all-mpnet-base-v2 (768-dim)</option>
+                <option value="all-roberta-large-v1">all-roberta-large-v1 (1024-dim, slowest)</option>
+            </optgroup>
+            </select>
+        <p class="form-help">
+            Changing the model requires re-embedding every book - vectors from
+            different models are not comparable. Measured on this machine:
+            e5-small 171/s (2.8h), e5-base 86/s (5.5h), bge-m3 26/s (18h).
+            Cross-language scores (Greek/Latin to English): e5-small 0.91/0.94,
+            bge-m3 0.88/0.83, all-MiniLM 0.12/0.17 - below the 0.3 similarity
+            threshold, which is why Greek and Latin never surfaced before.
+        </p>
     </div>
 
     <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">

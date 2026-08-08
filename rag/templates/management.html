@@ -94,6 +94,33 @@
     </div>
 </div>
 
+
+<!-- Queue Refresh -->
+<div class="section">
+    <h2>&#128260; Refresh Work Queues</h2>
+    <p class="section-description">
+        Rebuild the OCR and exclude queues from what is actually on disk. The
+        queues were hand-maintained, so any book added afterwards was never
+        considered by any pass &mdash; 65 books sat with no text layer while the
+        OCR queue reported empty. This asks the library instead of a stale list.
+        Takes about a minute. Run it whenever you add books.
+    </p>
+    <button id="refresh-queues-btn" class="btn btn-secondary">&#128260; Check Queues</button>
+    <button id="apply-ocr-btn" class="btn btn-secondary" disabled>&#10133; Add missing books to OCR queue</button>
+    <span id="refresh-queues-msg" class="scan-msg"></span>
+    <pre id="refresh-queues-out" class="hidden"
+         style="margin-top:1rem;padding:0.75rem;background:#111;color:#ddd;
+                border-radius:6px;max-height:420px;overflow:auto;
+                font-size:0.8rem;line-height:1.35;white-space:pre-wrap;"></pre>
+    <div class="workflow-note">
+        <strong>Check</strong> is read-only. <strong>Add missing books</strong> writes
+        <code>list_ocr.txt</code> only &mdash; safe, because OCR adds a text layer and a
+        file that turns out not to need one is rejected. The exclude list is
+        <em>not</em> written from here: removing books from search deserves a look at
+        <code>junk_candidates.txt</code> first.
+    </div>
+</div>
+
 <!-- Danger Zone -->
 <div class="section danger-zone">
     <h2>⚠️ Danger Zone</h2>
@@ -549,6 +576,43 @@ async function loadScanResults() {
 
 // Load stats on page load
 updateStats();
+
+
+// ---- Refresh work queues -------------------------------------------------
+async function runRefreshQueues(apply) {
+    const btn  = document.getElementById('refresh-queues-btn');
+    const ocr  = document.getElementById('apply-ocr-btn');
+    const msg  = document.getElementById('refresh-queues-msg');
+    const out  = document.getElementById('refresh-queues-out');
+    btn.disabled = true; ocr.disabled = true;
+    msg.textContent = apply ? 'Writing OCR queue...' : 'Probing every PDF (about a minute)...';
+    out.classList.remove('hidden');
+    out.textContent = '';
+    try {
+        const r = await fetch('/api/refresh-queues', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({apply: apply})
+        });
+        const d = await r.json();
+        out.textContent = d.output || d.error || '(no output)';
+        if (d.error) { msg.textContent = 'Failed'; }
+        else {
+            msg.textContent = apply ? 'OCR queue updated' : 'Done';
+            // only offer the write once a dry run has shown what it would do
+            ocr.disabled = apply;
+        }
+    } catch (e) {
+        msg.textContent = 'Failed';
+        out.textContent = String(e);
+    } finally {
+        btn.disabled = false;
+    }
+}
+document.getElementById('refresh-queues-btn')
+        .addEventListener('click', () => runRefreshQueues(false));
+document.getElementById('apply-ocr-btn')
+        .addEventListener('click', () => runRefreshQueues(true));
 
 // Refresh stats every 30 seconds
 setInterval(updateStats, 30000);

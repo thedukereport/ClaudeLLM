@@ -37,7 +37,27 @@ class RAGQuerier:
                 "Run index_books.py first."
             )
 
-        print(f"Loading embedding model: {model_name}")
+        # Which model built this index? Do not guess. multilingual-e5-small and
+        # all-MiniLM-L6-v2 are BOTH 384-dim, so loading the wrong one raises no
+        # dimension error -- it returns confident nonsense. index_books.py
+        # records the answer beside the index; trust that over any default.
+        self.query_prefix = ""
+        _meta = index_dir / "embedding_model.json"
+        if _meta.exists():
+            try:
+                _m = json.loads(_meta.read_text())
+                if _m.get("model"):
+                    model_name = _m["model"]
+                self.query_prefix = _m.get("query_prefix", "") or ""
+            except Exception as _e:
+                print(f"  ! could not read embedding_model.json: {_e}")
+        else:
+            print("  ! no embedding_model.json beside the index -- assuming "
+                  f"{model_name}. If the index was built with another model, "
+                  "results will be silently wrong.")
+
+        print(f"Loading embedding model: {model_name}"
+              + (f"  (query prefix {self.query_prefix!r})" if self.query_prefix else ""))
         self.model = SentenceTransformer(model_name)
 
         print(f"Loading FAISS index from {index_path}")
@@ -106,7 +126,8 @@ class RAGQuerier:
         # many/all clusters, and multi-threaded FAISS beside torch can segfault.
         faiss.omp_set_num_threads(1)
 
-        emb = self.model.encode(queries, convert_to_numpy=True).astype("float32")
+        _q = [self.query_prefix + q for q in queries] if self.query_prefix else queries
+        emb = self.model.encode(_q, convert_to_numpy=True).astype("float32")
         if self.is_cosine:
             faiss.normalize_L2(emb)
         nq = len(queries)
@@ -157,7 +178,8 @@ class RAGQuerier:
             self.set_search_params(nprobe=nprobe, ef_search=ef_search)
 
         # Encode query
-        query_embedding = self.model.encode([query], convert_to_numpy=True).astype("float32")
+        query_embedding = self.model.encode(
+            [self.query_prefix + query], convert_to_numpy=True).astype("float32")
         # For cosine indexes, the query must be normalized the same way the
         # stored vectors were, so inner product equals cosine similarity.
         if self.is_cosine:

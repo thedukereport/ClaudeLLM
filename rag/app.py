@@ -5,6 +5,7 @@ Management dashboard for semantic search across your book collection.
 """
 
 import os
+import re
 import sys
 import json
 import subprocess
@@ -788,6 +789,41 @@ def api_index_stats():
     """Get index statistics."""
     stats = get_index_stats()
     return jsonify(stats)
+
+
+@app.route('/api/refresh-queues', methods=['POST'])
+def api_refresh_queues():
+    """Rebuild the work queues from what is actually on disk.
+
+    The queues were hand-maintained, so any book added after they were written
+    stayed invisible to every pass: 65 books sat with no text layer while the
+    OCR queue reported empty and success. This asks the library instead."""
+    try:
+        data = request.get_json(silent=True) or {}
+        do_apply = bool(data.get('apply'))
+        books_dir = Path(STATE['books_dir'])
+        script = books_dir / '_Optimization' / 'refresh_queues.py'
+        if not script.exists():
+            return jsonify({'error': f'refresh_queues.py not found at {script}'}), 404
+        cmd = [sys.executable, str(script)]
+        if do_apply:
+            # OCR queue only. Writing index_exclude.txt from a button would let
+            # one click remove 65 books from search with nothing reviewed.
+            cmd.append('--apply-ocr')
+        env = os.environ.copy()
+        env['ALEX_ROOT'] = str(books_dir)
+        env['ALEX_OUT'] = str(books_dir / '_Optimization')
+        # Prefer the native arm64 poppler; /usr/local is the x86_64 prefix and
+        # would run every pdfinfo/pdftotext under Rosetta.
+        env['PATH'] = '/opt/homebrew/bin:' + env.get('PATH', '')
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=2400, env=env)
+        return jsonify({'success': r.returncode == 0,
+                        'applied': do_apply,
+                        'output': (r.stdout + r.stderr)[-12000:]})
+    except subprocess.TimeoutExpired:
+        return jsonify({'error': 'refresh_queues.py exceeded 40 minutes'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/clear-index', methods=['POST'])
