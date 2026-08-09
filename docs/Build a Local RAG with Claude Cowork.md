@@ -1,6 +1,6 @@
 # Build Your Own Local RAG (Like Peter's) with Claude Cowork
 
-*A complete, hand-held guide to building a private, local semantic search engine over your own library of PDFs and ebooks — the same system Peter built. No cloud, no subscriptions, everything runs on your own Mac.*
+*A complete, hand-held guide to building a private, local semantic search engine over your own library of PDFs and ebooks — the same system Peter built. No subscriptions and no per-query fees; the index and the search run on your own Mac. Claude itself is a cloud model, so the passages a search returns are sent to it as context — your library stays put, the excerpts travel.*
 
 > **How to use this guide.** Read Parts 1–7 in order. Every command is shown in a grey box — you copy it, paste it into the Terminal, and press Return. You do **not** need to understand the code. When something needs explaining, it's explained in plain language. The complete source code for every file is in **Appendix B** at the very end. The easiest path of all is to work through this *with Claude Cowork open* — paste any command that confuses you, or any error you see, straight into Cowork and ask "what does this mean / what do I do?"
 
@@ -3905,7 +3905,7 @@ if __name__ == "__main__":
         <div class="feature">
             <div class="feature-icon">⚡</div>
             <h3>Fast & Local</h3>
-            <p>Everything runs on your computer. No cloud, no privacy concerns. GPU-accelerated when available.</p>
+            <p>Your library and index stay on your computer, and search runs on your hardware — GPU-accelerated when available. Only the passages a search returns are sent to Claude.</p>
         </div>
         <div class="feature">
             <div class="feature-icon">📖</div>

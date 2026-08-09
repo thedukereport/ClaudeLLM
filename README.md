@@ -1,9 +1,13 @@
-# ClaudeLLM — a private, offline research stack for Claude
+# ClaudeLLM — a private, local-first research stack for Claude
 
-Turn a Mac (or Windows PC) into a **local research library that Claude can search directly** — no cloud, no subscriptions, your data never leaves your machine. It's two things working together:
+Turn a Mac (or Windows PC) into a **local research library that Claude can search directly** — no subscriptions, no per-query fees, and your library stays on your own disk.
+
+Being precise about that last part, because it is a privacy claim and privacy claims should be exact: the corpora and the search index live on your drive and never leave it, and the embedding and retrieval run on your own hardware. Claude itself is a cloud model, so the passages a search returns do travel to it as context — the same as anything you paste into a chat. What you avoid is uploading your library. What you do not avoid is Claude reading the excerpts it retrieves.
+
+It's two things working together:
 
 1. **A local RAG** — semantic search over *your own* PDF/EPUB library (meaning-based, not keyword), with a web dashboard to add books, health-check them, and tune the search.
-2. **Ten MCP servers** — offline, full-text-searchable corpora that Claude Desktop / Cowork can query as tools: scriptures, classical Greek & Latin, papyri, ancient places, all of Wikipedia, Project Gutenberg, and more.
+2. **Ten MCP servers** — full-text-searchable corpora, held locally and usable without an internet connection once built, that Claude Desktop / Cowork can query as tools: scriptures, classical Greek & Latin, papyri, ancient places, all of Wikipedia, Project Gutenberg, and more.
 
 ## The easy way: let Claude build it for you
 

@@ -1,6 +1,6 @@
 # BOOTSTRAP — build the ClaudeLLM local research stack
 
-**You are Claude, reading this because a user dropped this file into a fresh Cowork / Claude Desktop session.** Your job is to set up, *with them*, a private offline research stack on their computer: a local PDF-library RAG plus a suite of MCP servers over open corpora. The full code lives in a public GitHub repo (below). This file is your playbook.
+**You are Claude, reading this because a user dropped this file into a fresh Cowork / Claude Desktop session.** Your job is to set up, *with them*, a private local-first research stack on their computer (local corpora and local search; Claude itself still runs in the cloud, so retrieved passages reach it as context): a local PDF-library RAG plus a suite of MCP servers over open corpora. The full code lives in a public GitHub repo (below). This file is your playbook.
 
 Repo: **https://github.com/thedukereport/ClaudeLLM**
 
