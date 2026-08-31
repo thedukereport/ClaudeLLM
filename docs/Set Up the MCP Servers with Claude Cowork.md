@@ -34,6 +34,8 @@ its data.
 | `latin-resources` | Search/quote the Latin classics (Virgil, Horace, Cicero, Ovid, Martial…) by author, work, and line — **plus the Lewis & Short Latin dictionary** (`lewis_short`) | ~350 MB | **Yes** — Perseus TEI XML + L&S from Perseus lexica |
 | `perseus` | Search/quote the COMPLETE Perseus canonical library — 156 Greek and Latin authors, 2,299 texts, editions and translations | ~1.5 GB | **Yes** — two GitHub tarball downloads |
 | `papyri` | Search/quote ~67,600 documentary papyri (Duke Databank / DDbDP) — letters, contracts, petitions in Greek & Latin, by papyri.info id or Trismegistos (TM) number | ~100 MB | **Yes** — EpiDoc XML from papyri.info |
+| `astrology` | Offline natal charts, current/dated sky, and synastry (relationship) comparison — Swiss Ephemeris via **kerykeion** | tiny (code only) | **Yes** — pip install; the one server with a non-stdlib dependency |
+| `wordnet` | Define English words: senses, synonyms, antonyms, the broader/narrower (hypernym/hyponym) hierarchy, gloss search — Open English WordNet | ~80 MB | **Yes** — one script, stdlib only |
 | `alexandria-rag` | Semantic search over *your own* PDF library | varies | Only with your own PDFs |
 
 Plus two things that aren't servers:
@@ -354,6 +356,38 @@ These are last because they depend on corpora rather than a single download.
   with attribution. (This corpus is the *transcriptions* only; find-spot and date
   live in the separate HGV metadata, not loaded here.)
 
+- **`astrology`** computes charts offline — `natal_chart`, `sky` (now or any
+  date), and `synastry` (two-person comparison) — via **kerykeion** and the Swiss
+  Ephemeris. It's the **only** server that needs a non-stdlib package, so it gets
+  its own environment. Copy `astrology_mcp_server.py`, `setup_astro_env.sh`, and
+  `requirements.txt` into `/Volumes/DRIVE/Astrology/`, then:
+
+  ```
+  bash "/Volumes/DRIVE/Astrology/setup_astro_env.sh"
+  ```
+
+  That builds `astro_env` and installs kerykeion (which bundles the ephemeris —
+  no internet needed after install). Birth data is given as **latitude, longitude,
+  and an IANA timezone** (e.g. `America/New_York`) — no city lookup. In the config
+  block below, note this server's `command` points at **`Astrology/astro_env/bin/python`**,
+  not the shared `mcp_env`. Astrology isn't an empirical science: the tools report
+  the standard figures (positions, houses, aspects); interpretation is yours.
+
+- **`wordnet`** is an English dictionary/thesaurus engine — `define` (all senses,
+  with synonyms + examples), `synonyms`, `antonyms`, `related` (hypernym = broader,
+  hyponym = narrower, meronym = parts, holonym = wholes, similar, entails, causes),
+  and `search_glosses` (full-text over definitions). Copy `wordnet_mcp_server.py`
+  and `build_wordnet.py` into `/Volumes/DRIVE/WordNet/`, then:
+
+  ```
+  cd "/Volumes/DRIVE/WordNet"
+  python3 build_wordnet.py
+  ```
+
+  It downloads Open English WordNet (WN-LMF XML, ~11 MB) and builds
+  `wordnet.sqlite` (~80 MB, 107k synsets) in a couple of minutes — stdlib only,
+  so it runs under the shared `mcp_env`. Licensed **CC BY 4.0**.
+
 - **`perseus`** is the whole Perseus Digital Library in one server. Download the
   two canonical repositories as tarballs (`canonical-greekLit` and
   `canonical-latinLit` from the PerseusDL GitHub), extract them next to
@@ -431,6 +465,14 @@ file (things like `preferences`) exactly as they are.
       "command": "/Volumes/DRIVE/mcp_env/bin/python",
       "args": ["/Volumes/DRIVE/Alexandria/Papyri/papyri_mcp_server.py"]
     },
+    "astrology": {
+      "command": "/Volumes/DRIVE/Astrology/astro_env/bin/python",
+      "args": ["/Volumes/DRIVE/Astrology/astrology_mcp_server.py"]
+    },
+    "wordnet": {
+      "command": "/Volumes/DRIVE/mcp_env/bin/python",
+      "args": ["/Volumes/DRIVE/WordNet/wordnet_mcp_server.py"]
+    },
     "alexandria-rag": {
       "command": "/Volumes/DRIVE/Alexandria/RAG_system/rag_env/bin/python",
       "args": ["/Volumes/DRIVE/Alexandria/RAG_system/alexandria_mcp_server.py"]
@@ -474,6 +516,8 @@ In a new Cowork chat, ask Claude things only these servers could answer:
 - *"Search Wikipedia for the Bretton Woods system."*
 - *"List the Gutenberg subjects installed."* → shows each subset and its entry count
 - *"Get me Jubilees 1:1 from the Ethiopian canon."* → Ge'ez + transliteration + English together
+- *"Cast a natal chart for 15 June 1990, 2:30pm, lat 40.71 lng -74.01, America/New_York."* → planets, houses, aspects
+- *"Define 'bank' in WordNet, and give hyponyms of 'dog'."* → all senses; then puppy, cur, lapdog…
 - *"Look up virtus in Lewis & Short."* → the full Latin dictionary entry (manliness, virtue, valor…)
 - *"Search the papyri for βασιλ*."* → thousands of documentary hits; then *"get p.oxy.40.2901"* returns the Greek transcription
 
@@ -573,4 +617,4 @@ never have to guess which bucket a quotation came from.
 
 ---
 
-*Last updated: 2026-08-06 — added the `papyri` server (Duke Databank, ~67.6k documentary papyri), the Lewis & Short dictionary (`lewis_short`) on the Latin server, and the **Ethiopian (Tewahedo) canon** (36 books, Ge'ez + English) as a new `ethiopian` corpus in the scriptures server. Full roster is 10 MCP servers.*
+*Last updated: 2026-08-30 — added the `wordnet` server (Open English WordNet, 107k synsets, CC BY). Earlier: the `astrology` server (kerykeion), the `papyri` server (Duke Databank), the Lewis & Short dictionary on the Latin server, and the **Ethiopian (Tewahedo) canon** in the scriptures server. Full roster is 12 MCP servers.*

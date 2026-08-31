@@ -43,3 +43,5 @@ Thumbs.db
 *.swp
 *.log
 rag_config.json
+english-wordnet*.xml*
+*.xml.gz

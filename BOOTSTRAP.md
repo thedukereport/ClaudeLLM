@@ -102,6 +102,8 @@ Each server folder has its own builder. Recommended order: prove the setup with 
 | `wikipedia` | download a Kiwix `.zim` into the folder (see docs) | 12–115 GB | needs `libzim` |
 | `wikispooks` | provide the MediaWiki dump → `python build_wikispooks_corpus.py` | ~260 MB | verify license before republishing |
 | `atlas` | `python build_atlas.py` (after pleiades) | small | needs `duckdb` |
+| `astrology` | `bash setup_astro_env.sh` (builds its own env + installs kerykeion) | tiny | the ONLY server needing a pip package; its config entry uses `astro_env/bin/python`, not the shared `mcp_env`. Birth data = lat/lng/IANA tz |
+| `wordnet` | `python build_wordnet.py` | ~80 MB | Open English WordNet (CC BY); stdlib; define/synonyms/antonyms/hypernym-hyponym/gloss-search |
 
 Copy each server's `.py` files into a working folder on the drive first (the repo keeps them under `servers/<name>/`). The detailed, click-by-click instructions with expected output are in **`docs/Set Up the MCP Servers with Claude Cowork.md`** — follow it for any server the user picks.
 

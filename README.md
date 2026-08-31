@@ -7,7 +7,7 @@ Being precise about that last part, because it is a privacy claim and privacy cl
 It's two things working together:
 
 1. **A local RAG** — semantic search over *your own* PDF/EPUB library (meaning-based, not keyword), with a web dashboard to add books, health-check them, and tune the search.
-2. **Ten MCP servers** — full-text-searchable corpora, held locally and usable without an internet connection once built, that Claude Desktop / Cowork can query as tools: scriptures, classical Greek & Latin, papyri, ancient places, all of Wikipedia, Project Gutenberg, and more.
+2. **Twelve MCP servers** — full-text-searchable corpora, held locally and usable without an internet connection once built, that Claude Desktop / Cowork can query as tools: scriptures, classical Greek & Latin, papyri, ancient places, all of Wikipedia, Project Gutenberg — plus an English dictionary/thesaurus (WordNet) and an offline astrology calculator.
 
 ## The easy way: let Claude build it for you
 
@@ -23,7 +23,7 @@ docs/                ← the detailed human guides
 rag/                 ← the local PDF-library RAG + web dashboard
 servers/             ← the 10 MCP servers, each with its build script
   scriptures/  latin/  greek/  perseus/  papyri/
-  pleiades/    wikipedia/  wikispooks/  gutenberg/  atlas/
+  pleiades/    wikipedia/  wikispooks/  gutenberg/  atlas/  astrology/  wordnet/
 dashboard/           ← optional macOS control panel (author's example)
 ```
 
@@ -43,6 +43,8 @@ dashboard/           ← optional macOS control panel (author's example)
 | `gutenberg` | ~78,000 public-domain books, by subject | Public domain |
 | `wikispooks` | WikiSpooks wiki (~37.7k articles) | verify before republishing |
 | `atlas` | Geo-temporal place database (DuckDB) | CC BY (from Pleiades) |
+| `astrology` | Offline natal charts, current/dated sky, synastry (Swiss Ephemeris via kerykeion) | MIT code; ephemeris bundled |
+| `wordnet` | English definitions, synonyms, antonyms, hypernym/hyponym hierarchy, gloss search | CC BY 4.0 (Open English WordNet) |
 
 **Licensing matters for republishing.** Most corpora are public domain or CC BY/BY-SA (free to use with credit). **The Sefaria layers of the Tanakh, Talmud, and Mishnah are CC BY-NC — personal research only, not for resale.** Every result the servers return is stamped with its license so you always know. See [`LICENSE`](./LICENSE).
 
