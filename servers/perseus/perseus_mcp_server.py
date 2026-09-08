@@ -62,6 +62,67 @@ def strip_ns(tag):
     return tag.split("}")[-1] if "}" in tag else tag
 
 
+def stephanus_span(path, first, last):
+    """Text between two <milestone unit="section"> markers, inclusive.
+
+    Perseus marks Stephanus (Plato) and Bekker (Aristotle) sections as empty
+    milestone elements sitting inside the paragraph text rather than as
+    divisions wrapping it, so the section boundaries are only visible if the
+    document is read in order: text, marker, text, marker. An element-tree walk
+    that reads each paragraph whole cannot see them, which is why this server
+    served the whole page and refused the letter until 2026-09-07.
+
+    Returns the text, or "" if the markers are not in this edition.
+    """
+    import xml.etree.ElementTree as _ET
+    try:
+        root = _ET.parse(str(path)).getroot()
+    except _ET.ParseError:
+        return ""
+
+    events = []          # ("mark", n) and ("text", s), in document order
+
+    def order(el):
+        for child in el:
+            tag = strip_ns(child.tag)
+            if tag == "milestone" and (child.get("unit") or "") == "section":
+                events.append(("mark", (child.get("n") or "").strip()))
+            else:
+                if child.text and child.text.strip():
+                    events.append(("text", child.text))
+                order(child)
+            if child.tail and child.tail.strip():
+                events.append(("text", child.tail))
+
+    order(root)
+
+    marks = [n for k, n in events if k == "mark"]
+    if first not in marks:
+        return ""
+    # Take everything from the opening marker up to the marker AFTER the last
+    # one asked for, so "327a-328b" ends where 328c begins.
+    try:
+        stop = marks[marks.index(last) + 1] if last in marks else None
+    except IndexError:
+        stop = None
+
+    out, on, label = [], False, None
+    for kind, val in events:
+        if kind == "mark":
+            if val == first:
+                on, label = True, val
+                out.append(f"[{val}] ")
+                continue
+            if on and val == stop:
+                break
+            if on:
+                out.append(f"\n\n[{val}] ")
+            continue
+        if on:
+            out.append(val)
+    return re.sub(r"[ \t]+", " ", "".join(out)).strip()
+
+
 def slugify(name):
     s = fold(name)
     s = re.sub(r"[^a-z0-9]+", "_", s).strip("_")
@@ -281,10 +342,30 @@ def passage(author, work, reference, lang=None):
         pick = next(iter(files.values()))
     f = HERE / pick
 
+    # STEPHANUS / BEKKER REFERENCES — "327a", "327a-328b", "1094a".
+    # Plato is always cited by Stephanus page-and-letter and Aristotle by Bekker;
+    # before 2026-09-07 both returned a hard ERROR from the numeric regex below,
+    # so the server could not serve its own Plato at all. The letters ARE in the
+    # files: <milestone unit="section" n="327a"/> marks each one, 5,867 of them
+    # in the Republic. This branch reads those milestones in document order and
+    # returns the span between them. It fires only on references that used to
+    # error out, so nothing that worked before takes a different path.
+    sref = reference.strip()
+    ms = re.match(r"^(?:(\d+)\.)?(\d+[a-e])(?:\s*-\s*(\d+[a-e]))?$", sref)
+    if ms:
+        seg = stephanus_span(f, ms.group(2), ms.group(3) or ms.group(2))
+        if seg:
+            span = ms.group(2) + (f"–{ms.group(3)}" if ms.group(3) else "")
+            return (f"{author}, {title} {span} (Perseus {Path(pick).name}):\n\n" + seg)
+        return (f"No section {ms.group(2)} found in {title} "
+                f"({Path(pick).name}). This edition may not mark Stephanus "
+                f"sections; try the page number alone.")
+
     m = re.match(r"^(?:(\d+)\.)?(?:(\d+)\.)?(\d+)(?:-(\d+))?$", reference.strip())
     if not m:
         return ("ERROR: reference format is 'book.poem.line-line', "
-                "'book.line-line', or 'line'.")
+                "'book.line-line', 'line', or a Stephanus/Bekker section "
+                "like '327a' or '327a-328b'.")
     book, poem, first, last = m.group(1), m.group(2), int(m.group(3)), m.group(4)
     last = int(last) if last else first
     if book is None and poem is not None:
@@ -298,6 +379,19 @@ def passage(author, work, reference, lang=None):
         except (TypeError, ValueError):
             return -1
 
+    # Everything the walk sees, whether or not it matches the filter, as
+    # (divpath, text). Two fallbacks below read it. Costs one list per call.
+    #
+    # WHY: a bare reference like "48" was compared against divpath[-1], the
+    # LAST division level. In a two-level prose work — Aristotle's Athenaion
+    # Politeia is chapter.section — that compares the chapter number 48 against
+    # the section number 4 and never matches, so asking for a chapter returned
+    # "No text found ... check the reference against the edition's numbering."
+    # The edition's numbering was fine. On 2026-09-07 that message was written
+    # into a fact-check ledger as "Perseus would not serve those sections" and
+    # a citation sat unverified for five days; 48.4 and 54.2 both work.
+    seen = []
+
     def walk(el, divpath):
         for child in el:
             tag = strip_ns(child.tag)
@@ -310,6 +404,7 @@ def passage(author, work, reference, lang=None):
                     walk(child, divpath)
             elif tag == "l":
                 n = child.get("n")
+                seen.append((tuple(divpath), f"{n}  {strip_tags(child)}"))
                 if book:
                     if poem:
                         if len(divpath) < 2 or divpath[-2] != book or divpath[-1] != poem:
@@ -322,6 +417,7 @@ def passage(author, work, reference, lang=None):
             elif tag == "p":
                 bk = divpath[0] if divpath else None
                 ch = divpath[-1] if divpath else None
+                seen.append((tuple(divpath), f"{'.'.join(divpath)}  {strip_tags(child)}"))
                 if book:
                     if bk == book and first <= int_or(ch) <= last:
                         out.append(f"{'.'.join(divpath)}  {strip_tags(child)}")
@@ -335,15 +431,56 @@ def passage(author, work, reference, lang=None):
     except ET.ParseError as e:
         return f"ERROR: XML parse failure in {Path(pick).name}: {e}"
     walk(root, [])
+
+    # FALLBACK 1 — a bare number that names a whole chapter.
+    # The filter above compares against the last division level. When the caller
+    # gave a bare number and got nothing, try it as the FIRST level and return
+    # every sub-section under it: ask for 48, get 48.1 through 48.5.
+    whole_chapter = False
+    if not out and book is None and poem is None:
+        for path, text in seen:
+            if path and first <= int_or(path[0]) <= last:
+                out.append(text)
+        whole_chapter = bool(out)
+
+    # FALLBACK 2 — still nothing. Say what the edition actually contains at the
+    # level asked for, instead of telling the reader to doubt their reference.
+    # A checker who is told "no text found" writes the source off; a checker who
+    # is told "this work numbers 1-69 at the top level" fixes the reference.
     if not out:
-        return (f"No text found for {title} {reference} in {Path(pick).name} — "
-                f"check the reference against the edition's numbering "
-                f"(some prose works cite by Casaubon/Stephanus pages).")
+        tops, subs = [], []
+        for path, _ in seen:
+            if path:
+                if path[0] not in tops:
+                    tops.append(path[0])
+                if book and path[0] == book and len(path) > 1 and path[1] not in subs:
+                    subs.append(path[1])
+        def span(v):
+            nums = [int_or(x) for x in v if int_or(x) >= 0]
+            if len(nums) > 3:
+                return f"{min(nums)}–{max(nums)}"
+            return ", ".join(v[:12]) + ("…" if len(v) > 12 else "")
+        msg = [f"No text found for {title} {reference} in {Path(pick).name}."]
+        if book and subs:
+            msg.append(f"{title} {book} exists and has sub-sections {span(subs)} — "
+                       f"try {book}.{subs[0]}.")
+        elif tops:
+            msg.append(f"This edition numbers {span(tops)} at the top level. "
+                       f"Prose works here are usually cited chapter.section, so "
+                       f"try {tops[0]}.1 rather than a bare number.")
+        else:
+            msg.append("This edition carries no numbered divisions; some prose "
+                       "works cite by Casaubon/Stephanus pages instead.")
+        return " ".join(msg)
     loc = ".".join(p for p in (book, poem) if p)
     ref = f"{title} {loc}.{first}" if loc else f"{title} {first}"
     if last != first:
         ref += f"-{last}"
-    return f"{author}, {ref} (Perseus {Path(pick).name}):\n\n" + "\n".join(out[:200])
+    # Say when the bare-number fallback fired, so a reader who asked for "48"
+    # and received five sub-sections knows why, and can cite 48.4 exactly.
+    note = "  [whole chapter — sub-sections shown with their numbers]" if whole_chapter else ""
+    return (f"{author}, {ref}{note} (Perseus {Path(pick).name}):\n\n"
+            + "\n".join(out[:200]))
 
 
 # ── MCP plumbing ────────────────────────────────────────────────────
@@ -396,7 +533,12 @@ TOOLS = [
             "properties": {
                 "author": {"type": "string", "description": "Author slug"},
                 "work": {"type": "string", "description": "Work title or substring"},
-                "reference": {"type": "string", "description": "'9.47', '5.250-257', or '45'"},
+                "reference": {"type": "string", "description":
+                    "Verse: '1.1-5' (book.line) or '9.47'. Prose divided into "
+                    "chapter.section: '48.4', or a bare '48' for the whole "
+                    "chapter. Plato and Aristotle by Stephanus/Bekker section: "
+                    "'327a', '327a-328b'. A bare number that finds nothing will "
+                    "report the range the edition actually numbers."},
                 "lang": {"type": "string", "description": "Optional: grc, lat, eng"},
             },
             "required": ["author", "work", "reference"],
