@@ -169,18 +169,46 @@ def _on_alarm(signum, frame):
 # Scaling by file size costs one stat and bounds the damage either way: a normal
 # book still gets the old 90-second floor, a 200 MB volume gets twenty minutes,
 # and a genuine infinite loop still dies at the ceiling.
+#
+# Size alone is not enough. *The Pauline Kael Reader* is 3,108 pages of real
+# text but only 11.7 MB — its whole text layer lives in compressed object
+# streams, so megabytes badly understate the work. Size-scaling gave it 90 s;
+# pdfplumber needs ~200 s, so it timed out and cached NOTHING, silently dropping
+# a 1.2-million-word book from the index (2026-09-14). The budget therefore also
+# scales by PAGE COUNT, taking whichever estimate is larger. The page count is a
+# real (but cheap) structural parse — no content is decoded — and it only runs
+# for files actually being (re)extracted, never for cache hits.
 PER_FILE_TIMEOUT = int(os.environ.get("ALEX_EXTRACT_TIMEOUT", "90"))
 TIMEOUT_CEILING = int(os.environ.get("ALEX_EXTRACT_TIMEOUT_MAX", "1800"))
 SECONDS_PER_MB = float(os.environ.get("ALEX_EXTRACT_SECONDS_PER_MB", "6"))
+SECONDS_PER_PAGE = float(os.environ.get("ALEX_EXTRACT_SECONDS_PER_PAGE", "0.5"))
+
+
+def _page_count(path):
+    """Cheap page count via a structural parse (no content decode). Returns 0 on
+    any failure so the caller falls back to size-based budgeting."""
+    if not path.lower().endswith(".pdf"):
+        return 0
+    try:
+        import pdfplumber
+        with pdfplumber.open(path) as pdf:
+            return len(pdf.pages)
+    except Exception:
+        return 0
 
 
 def timeout_for(path):
-    """Seconds to allow this file: the floor, or six seconds a megabyte, capped."""
+    """Seconds to allow this file: the larger of the size-based and page-based
+    estimates, held between the floor and the ceiling."""
     try:
         mb = os.path.getsize(path) / 1_000_000
     except OSError:
         return PER_FILE_TIMEOUT
-    return int(max(PER_FILE_TIMEOUT, min(TIMEOUT_CEILING, mb * SECONDS_PER_MB)))
+    budget = mb * SECONDS_PER_MB
+    pages = _page_count(path)
+    if pages:
+        budget = max(budget, pages * SECONDS_PER_PAGE)
+    return int(max(PER_FILE_TIMEOUT, min(TIMEOUT_CEILING, budget)))
 
 
 def extract_one(task):
