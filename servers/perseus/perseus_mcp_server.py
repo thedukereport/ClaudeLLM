@@ -253,7 +253,20 @@ def build_index():
                                                     "works": {}})
             wk = entry["works"].setdefault(w["title"], {"id": w["id"],
                                                         "files": {}})
-            wk["files"][w["lang"]] = str(w["file"].relative_to(HERE))
+            # Pattern B (string-or-list): a work's directory can hold several
+            # edition files for one language (e.g. Diodorus grc4/grc5/grc6 cover
+            # different book ranges). Keep the first as a bare string so every
+            # existing single-file entry is untouched; promote to a list only
+            # when a second file for the same language appears.
+            rel = str(w["file"].relative_to(HERE))
+            cur = wk["files"].get(w["lang"])
+            if cur is None:
+                wk["files"][w["lang"]] = rel
+            elif isinstance(cur, list):
+                if rel not in cur:
+                    cur.append(rel)
+            elif cur != rel:
+                wk["files"][w["lang"]] = [cur, rel]
             for loc, txt in parse_tei(w["file"]):
                 rec = {"a": w["aslug"], "w": w["title"], "g": w["lang"],
                        "l": loc, "t": txt, "f": fold(txt)}
@@ -317,31 +330,16 @@ def authors_list(substring=None):
     return "\n".join(lines)
 
 
-def passage(author, work, reference, lang=None):
-    ensure_index()
-    catalog = json.loads(AUTHORS.read_text())
-    if author not in catalog:
-        near = [s for s in catalog if fold(author) in s][:10]
-        return ("ERROR: unknown author '%s'.%s" %
-                (author, (" Near matches: " + ", ".join(near)) if near else
-                 " Use perseus_authors to browse."))
-    entry = catalog[author]
-    wq = work.lower()
-    cand = [(t, w) for t, w in entry["works"].items() if wq in t.lower()]
-    if not cand:
-        return ("ERROR: no work matching '%s' for %s. Works: %s" %
-                (work, author, "; ".join(entry["works"])))
-    title, winfo = cand[0]
-    files = winfo["files"]
-    pick = None
-    for pref in ([lang] if lang else []) + ["grc", "lat", "eng"]:
-        if pref in files:
-            pick = files[pref]
-            break
-    if pick is None:
-        pick = next(iter(files.values()))
-    f = HERE / pick
+def _resolve_reference(f, reference, author, title, pick):
+    """Resolve `reference` within a single edition file `f`.
 
+    Returns (True, passage_text) when the reference is present in this file, or
+    (False, report) when it is not — the report says what this file actually
+    contains, so the caller can try the next candidate file and, if every one
+    misses, still show the reader something useful. Raises ValueError when the
+    reference itself is malformed (a file-independent condition the caller turns
+    into a single format message).
+    """
     # STEPHANUS / BEKKER REFERENCES — "327a", "327a-328b", "1094a".
     # Plato is always cited by Stephanus page-and-letter and Aristotle by Bekker;
     # before 2026-09-07 both returned a hard ERROR from the numeric regex below,
@@ -356,16 +354,14 @@ def passage(author, work, reference, lang=None):
         seg = stephanus_span(f, ms.group(2), ms.group(3) or ms.group(2))
         if seg:
             span = ms.group(2) + (f"–{ms.group(3)}" if ms.group(3) else "")
-            return (f"{author}, {title} {span} (Perseus {Path(pick).name}):\n\n" + seg)
-        return (f"No section {ms.group(2)} found in {title} "
-                f"({Path(pick).name}). This edition may not mark Stephanus "
-                f"sections; try the page number alone.")
+            return True, (f"{author}, {title} {span} (Perseus {Path(pick).name}):\n\n" + seg)
+        return False, (f"No section {ms.group(2)} found in {title} "
+                       f"({Path(pick).name}). This edition may not mark Stephanus "
+                       f"sections; try the page number alone.")
 
     m = re.match(r"^(?:(\d+)\.)?(?:(\d+)\.)?(\d+)(?:-(\d+))?$", reference.strip())
     if not m:
-        return ("ERROR: reference format is 'book.poem.line-line', "
-                "'book.line-line', 'line', or a Stephanus/Bekker section "
-                "like '327a' or '327a-328b'.")
+        raise ValueError("bad reference format")
     book, poem, first, last = m.group(1), m.group(2), int(m.group(3)), m.group(4)
     last = int(last) if last else first
     if book is None and poem is not None:
@@ -415,13 +411,25 @@ def passage(author, work, reference, lang=None):
                 if first <= ln <= last:
                     out.append(f"{ln}  {strip_tags(child)}")
             elif tag == "p":
-                bk = divpath[0] if divpath else None
-                ch = divpath[-1] if divpath else None
                 seen.append((tuple(divpath), f"{'.'.join(divpath)}  {strip_tags(child)}"))
                 if book:
-                    if bk == book and first <= int_or(ch) <= last:
-                        out.append(f"{'.'.join(divpath)}  {strip_tags(child)}")
-                elif first <= int_or(ch) <= last:
+                    if poem:
+                        # Three-part reference book.chapter.section. Prose works
+                        # like Diodorus nest book > chapter > section, so match
+                        # the last three division levels — mirroring the verse
+                        # branch's book/poem check. Filtering on book + section
+                        # alone (the old behaviour) returned every X.section
+                        # across the whole book, e.g. 4.6.5 pulled 4.1.5, 4.2.5…
+                        if (len(divpath) >= 3 and divpath[-3] == book
+                                and divpath[-2] == poem
+                                and first <= int_or(divpath[-1]) <= last):
+                            out.append(f"{'.'.join(divpath)}  {strip_tags(child)}")
+                    else:
+                        bk = divpath[0] if divpath else None
+                        ch = divpath[-1] if divpath else None
+                        if bk == book and first <= int_or(ch) <= last:
+                            out.append(f"{'.'.join(divpath)}  {strip_tags(child)}")
+                elif divpath and first <= int_or(divpath[-1]) <= last:
                     out.append(f"{'.'.join(divpath)}  {strip_tags(child)}")
             else:
                 walk(child, divpath)
@@ -429,7 +437,7 @@ def passage(author, work, reference, lang=None):
     try:
         root = ET.parse(str(f)).getroot()
     except ET.ParseError as e:
-        return f"ERROR: XML parse failure in {Path(pick).name}: {e}"
+        return False, f"ERROR: XML parse failure in {Path(pick).name}: {e}"
     walk(root, [])
 
     # FALLBACK 1 — a bare number that names a whole chapter.
@@ -443,7 +451,7 @@ def passage(author, work, reference, lang=None):
                 out.append(text)
         whole_chapter = bool(out)
 
-    # FALLBACK 2 — still nothing. Say what the edition actually contains at the
+    # FALLBACK 2 — still nothing here. Say what THIS file actually contains at the
     # level asked for, instead of telling the reader to doubt their reference.
     # A checker who is told "no text found" writes the source off; a checker who
     # is told "this work numbers 1-69 at the top level" fixes the reference.
@@ -471,7 +479,8 @@ def passage(author, work, reference, lang=None):
         else:
             msg.append("This edition carries no numbered divisions; some prose "
                        "works cite by Casaubon/Stephanus pages instead.")
-        return " ".join(msg)
+        return False, " ".join(msg)
+
     loc = ".".join(p for p in (book, poem) if p)
     ref = f"{title} {loc}.{first}" if loc else f"{title} {first}"
     if last != first:
@@ -479,8 +488,53 @@ def passage(author, work, reference, lang=None):
     # Say when the bare-number fallback fired, so a reader who asked for "48"
     # and received five sub-sections knows why, and can cite 48.4 exactly.
     note = "  [whole chapter — sub-sections shown with their numbers]" if whole_chapter else ""
-    return (f"{author}, {ref}{note} (Perseus {Path(pick).name}):\n\n"
-            + "\n".join(out[:200]))
+    return True, (f"{author}, {ref}{note} (Perseus {Path(pick).name}):\n\n"
+                  + "\n".join(out[:200]))
+
+
+def passage(author, work, reference, lang=None):
+    ensure_index()
+    catalog = json.loads(AUTHORS.read_text())
+    if author not in catalog:
+        near = [s for s in catalog if fold(author) in s][:10]
+        return ("ERROR: unknown author '%s'.%s" %
+                (author, (" Near matches: " + ", ".join(near)) if near else
+                 " Use perseus_authors to browse."))
+    entry = catalog[author]
+    wq = work.lower()
+    cand = [(t, w) for t, w in entry["works"].items() if wq in t.lower()]
+    if not cand:
+        return ("ERROR: no work matching '%s' for %s. Works: %s" %
+                (work, author, "; ".join(entry["works"])))
+    title, winfo = cand[0]
+    files = winfo["files"]
+    pick_list = None
+    for pref in ([lang] if lang else []) + ["grc", "lat", "eng"]:
+        if pref in files:
+            raw = files[pref]
+            pick_list = raw if isinstance(raw, list) else [raw]
+            break
+    if pick_list is None:
+        only = next(iter(files.values()))
+        pick_list = only if isinstance(only, list) else [only]
+
+    # Multi-edition works list several files, each covering a different book
+    # range (Diodorus grc4 = books 11–17, grc5 = 1–5, grc6 = 18–20). Try each in
+    # turn and return the first that actually contains the reference; if none
+    # does, return the most informative "not found here" report so the reader
+    # learns what the edition holds instead of a bare miss.
+    try:
+        misses = []
+        for pick in pick_list:
+            ok, text = _resolve_reference(HERE / pick, reference, author, title, pick)
+            if ok:
+                return text
+            misses.append(text)
+    except ValueError:
+        return ("ERROR: reference format is 'book.poem.line-line', "
+                "'book.line-line', 'line', or a Stephanus/Bekker section "
+                "like '327a' or '327a-328b'.")
+    return misses[0] if misses else f"No text found for {title} {reference}."
 
 
 # ── MCP plumbing ────────────────────────────────────────────────────
