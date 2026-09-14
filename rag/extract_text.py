@@ -21,6 +21,7 @@ Run standalone to (re)populate the cache:
 """
 
 import os
+import re
 import sys
 import time
 import hashlib
@@ -63,10 +64,21 @@ def is_cached(cache_dir, path):
         return False
 
 
+# Some PDFs carry NUL bytes and other C0/C1 control characters in their text
+# layer (bad OCR/generation); pdfplumber extracts them verbatim, which pollutes
+# the cache and the embeddings — a chunk that is 20% NUL embeds to noise. Strip
+# them at the cache boundary. Tab, newline and carriage return are preserved.
+_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def sanitize_text(text):
+    return _CONTROL_RE.sub("", text) if text else text
+
+
 def read_cached_text(cache_dir, path):
     txt, _ = cache_files(cache_dir, path)
     try:
-        return txt.read_text(encoding="utf-8", errors="ignore")
+        return sanitize_text(txt.read_text(encoding="utf-8", errors="ignore"))
     except OSError:
         return ""
 
@@ -74,7 +86,7 @@ def read_cached_text(cache_dir, path):
 def write_cache(cache_dir, path, text):
     txt, meta = cache_files(cache_dir, path)
     txt.parent.mkdir(parents=True, exist_ok=True)
-    txt.write_text(text, encoding="utf-8")
+    txt.write_text(sanitize_text(text), encoding="utf-8")
     meta.write_text(_sig(path))
 
 

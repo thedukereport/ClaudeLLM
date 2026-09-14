@@ -1015,6 +1015,25 @@ def render_health_page() -> str:
     badge = ('<span class="srv-mount srv-mount-ok">HEALTHY</span>' if ok else
              '<span class="srv-mount srv-mount-bad">PROBLEMS FOUND</span>')
     import html as _html
+
+    # Source-PDF integrity report (written by the PDF integrity scan; static —
+    # regenerate that scan to refresh). Show its summary + a link to open it.
+    integ_path = PROBLADE_ALEXANDRIA / "pdf_integrity_report.txt"
+    if integ_path.exists():
+        itext = integ_path.read_text(errors="replace")
+        iline = next((l for l in itext.splitlines() if l.startswith("RESULT:")), "")
+        integ_html = (
+            f'<div class="case-header" style="margin-top:24px"><h1>Source-PDF Integrity</h1>'
+            f'<div class="case-meta">{_html.escape(iline)} · '
+            f'<a href="file://{quote(str(integ_path))}">open full report ↗</a></div></div>'
+            f'<pre style="white-space:pre-wrap;font-size:13px;line-height:1.5;'
+            f'background:#111;color:#ddd;padding:16px;border-radius:8px;">'
+            f'{_html.escape(itext)}</pre>')
+    else:
+        integ_html = ('<div class="case-meta" style="margin-top:24px">No source-PDF '
+                      'integrity report found (expected pdf_integrity_report.txt in '
+                      f'{_html.escape(str(PROBLADE_ALEXANDRIA))}).</div>')
+
     return f"""<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="utf-8">
@@ -1027,6 +1046,7 @@ def render_health_page() -> str:
   <div class="case-meta">{datetime.datetime.now().strftime("%H:%M:%S")} — invariant chain: manifest = metadata = embeddings = index</div></div>
   <div class="srv-mount-row">{badge}</div>
   <pre style="white-space:pre-wrap;font-size:13px;line-height:1.5;background:#111;color:#ddd;padding:16px;border-radius:8px;">{_html.escape(body)}</pre>
+  {integ_html}
 </div></body></html>"""
 
 
