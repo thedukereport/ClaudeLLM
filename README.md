@@ -7,7 +7,7 @@ Being precise about that last part, because it is a privacy claim and privacy cl
 It's two things working together:
 
 1. **A local RAG** — semantic search over *your own* PDF/EPUB library (meaning-based, not keyword), with a web dashboard to add books, health-check them, and tune the search.
-2. **Twelve MCP servers** — full-text-searchable corpora, held locally and usable without an internet connection once built, that Claude Desktop / Cowork can query as tools: scriptures, classical Greek & Latin, papyri, ancient places, all of Wikipedia, Project Gutenberg — plus an English dictionary/thesaurus (WordNet) and an offline astrology calculator.
+2. **Fourteen MCP servers** — full-text-searchable corpora, held locally and usable without an internet connection once built, that Claude Desktop / Cowork can query as tools: scriptures, classical Greek & Latin, papyri, ancient places, ancient chronography (Eusebius & Syncellus) and cuneiform royal inscriptions, all of Wikipedia, Project Gutenberg — plus an English dictionary/thesaurus (WordNet) and an offline astrology calculator.
 
 ## The easy way: let Claude build it for you
 
@@ -21,9 +21,10 @@ You don't need to follow the guides by hand. **Open Claude Cowork (or Claude Des
 BOOTSTRAP.md         ← give this to Claude to build the stack
 docs/                ← the detailed human guides
 rag/                 ← the local PDF-library RAG + web dashboard
-servers/             ← the 10 MCP servers, each with its build script
+servers/             ← the MCP servers, each with its build script
   scriptures/  latin/  greek/  perseus/  papyri/
   pleiades/    wikipedia/  wikispooks/  gutenberg/  atlas/  astrology/  wordnet/
+  chronography/  cuneiform/
 dashboard/           ← optional macOS control panel (author's example)
 ```
 
@@ -45,6 +46,8 @@ dashboard/           ← optional macOS control panel (author's example)
 | `atlas` | Geo-temporal place database (DuckDB) | CC BY (from Pleiades) |
 | `astrology` | Offline natal charts, current/dated sky, synastry (Swiss Ephemeris via kerykeion) | MIT code; ephemeris bundled |
 | `wordnet` | English definitions, synonyms, antonyms, hypernym/hyponym hierarchy, gloss search | CC BY 4.0 (Open English WordNet) |
+| `chronography` | Ancient synchronism: Eusebius's *Chronicle* (Jerome's Latin + Karst's German of the Armenian) & George Syncellus (Manetho/Berossus/Africanus fragments) | Public domain |
+| `cuneiform-chronicles` | ~11,800 cuneiform royal inscriptions & historiographic texts (Neo-Assyrian annals, Neo-Babylonian, Achaemenid + earlier) from CDLI | CDLI: free re-use of text w/ attribution |
 
 **Licensing matters for republishing.** Most corpora are public domain or CC BY/BY-SA (free to use with credit). **The Sefaria layers of the Tanakh, Talmud, and Mishnah are CC BY-NC — personal research only, not for resale.** Every result the servers return is stamped with its license so you always know. See [`LICENSE`](./LICENSE).
 

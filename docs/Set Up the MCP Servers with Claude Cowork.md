@@ -30,7 +30,7 @@ its data.
 | `gutenberg` | Search ~78,000 public-domain books, by subject | 11.3 GB–207 GB (you choose) | **Yes** — downloader included |
 | `wikipedia` | Search all of Wikipedia offline | 115 GB | Yes, but a huge download |
 | `wikispooks` | Search 31,865 articles of the WikiSpooks wiki | 259 MB | Needs the site's database dump |
-| `greek-resources` | Greek NT/LXX text, LSJ lexicon, Galen | varies | Yes (open corpora) |
+| `greek-resources` | Greek NT — **8 editions** (Byzantine, SBLGNT, NA28, NA27, Tyndale House, Tregelles, Westcott-Hort, TR) — + LXX (Swete + Theodotion), LSJ, Middle Liddell, Smith's dictionaries, Galen | varies | Yes (open corpora) |
 | `latin-resources` | Search/quote the Latin classics (Virgil, Horace, Cicero, Ovid, Martial…) by author, work, and line — **plus the Lewis & Short Latin dictionary** (`lewis_short`) | ~350 MB | **Yes** — Perseus TEI XML + L&S from Perseus lexica |
 | `perseus` | Search/quote the COMPLETE Perseus canonical library — 156 Greek and Latin authors, 2,299 texts, editions and translations | ~1.5 GB | **Yes** — two GitHub tarball downloads |
 | `papyri` | Search/quote ~67,600 documentary papyri (Duke Databank / DDbDP) — letters, contracts, petitions in Greek & Latin, by papyri.info id or Trismegistos (TM) number | ~100 MB | **Yes** — EpiDoc XML from papyri.info |
@@ -317,11 +317,16 @@ Also check WikiSpooks' own licensing before republishing any of its text.
 
 These are last because they depend on corpora rather than a single download.
 
-- **`greek-resources`** serves the Greek New Testament and Septuagint, the LSJ and
-  Middle Liddell lexicons, and Galen. The texts are open (First1KGreek and
-  friends) and arrive as XML. Copy `greek_mcp_server.py` and its data folder.
-  When citing in published work, cite **author, work, and edition — never a file
-  path.** For the New Testament, the standard used here is the Byzantine textform.
+- **`greek-resources`** serves the Greek New Testament in **eight editions**
+  (Byzantine — the project's primary standard — plus SBLGNT, NA28, NA27, Tyndale
+  House, Tregelles, Westcott-Hort, and Textus Receptus; compare them all at one
+  reference with the `editions` tool), the Septuagint (Swete, with Theodotion for
+  Daniel/Susanna/Bel), the LSJ and Middle Liddell lexicons, Smith's three
+  dictionaries, and the Perseus greekLit corpus (incl. Galen). The texts are open
+  (First1KGreek and friends) and arrive as XML. Copy `greek_mcp_server.py`,
+  `greek_lookup.py` and its data folder. Run `python3 greek_lookup.py inventory`
+  for a one-line list of everything installed. When citing in published work, cite
+  **author, work, and edition — never a file path.**
 
 - **`latin-resources`** is the Latin twin of the Greek server: `latin_mcp_server.py`
   plus per-author folders of Perseus TEI XML, each with a small `manifest.json`
@@ -401,6 +406,51 @@ These are last because they depend on corpora rather than a single download.
   won't resolve, search a distinctive phrase instead and read the section
   number off the hit.
 
+- **`chronography`** holds the ancient synchronism sources — the chronographers who
+  aligned the reign-lists of Egypt, Assyria, Babylon, and the Hebrews against one
+  another. `search` (accent-insensitive, with a `source` filter), `get` (a passage
+  plus its neighbours), `inventory`, and `canon`. Copy `chronography_mcp_server.py`
+  and `build_chronography.py` into `/Volumes/DRIVE/Chronography/`, then:
+
+  ```
+  cd "/Volumes/DRIVE/Chronography"
+  python3 build_chronography.py
+  ```
+
+  It downloads three public-domain volumes from the Internet Archive and builds
+  `chronography.sqlite` (~6 MB, 2,708 segments) — stdlib only, shared `mcp_env`:
+  Eusebius's *Chronicle* in Jerome's Latin (ed. Fotheringham 1923) and in Karst's
+  German of the Armenian (1911), and George Syncellus's *Ecloga Chronographica*
+  (ed. Dindorf 1829), which is where the lost Manetho, Berossus, and **Julius
+  Africanus** fragments survive. `canon` covers Ptolemy's Canon of Kings: it points
+  you to the Almagest (on the `perseus` server) rather than storing a reconstructed
+  regnal table, because those numbers must be read from an edition, not recalled.
+  The 1829 Syncellus scan's polytonic Greek OCR is rough — verify Greek before quoting.
+
+- **`cuneiform-chronicles`** is the primary Mesopotamian side of the same story:
+  ~11,800 cuneiform **royal inscriptions and historiographic texts** — Neo-Assyrian
+  royal annals, Neo-Babylonian and Achaemenid material, and earlier Sumerian/Akkadian
+  inscriptions — the sources that carry regnal, campaign, and synchronism data.
+  `search` (with `period` and `genre` filters), `get` (full ATF transliteration by
+  CDLI P-number), and `inventory`. Copy `cuneiform_mcp_server.py` and
+  `build_cuneiform.py` into `/Volumes/DRIVE/Cuneiform/`, fetch the CDLI bulk dump
+  (it's git-LFS), and build:
+
+  ```
+  git clone https://github.com/cdli-gh/data && cd data && git lfs fetch && git lfs checkout
+  cp cdliatf_unblocked.atf cdli_cat.csv "/Volumes/DRIVE/Cuneiform/"
+  cd "/Volumes/DRIVE/Cuneiform" && python3 build_cuneiform.py
+  ```
+
+  That builds `cuneiform.sqlite` (~17 MB) — stdlib only, shared `mcp_env`. Under
+  CDLI's Terms of Use the transliterations are free to re-use with attribution (the
+  photographs and line art are copyrighted and are *not* used); the server prints the
+  CDLI credit on every result. Scope note: the modern critical editions of the
+  Babylonian Chronicle *series* (Grayson's ABC, Glassner) are under copyright and are
+  deliberately left out — this corpus is the openly-licensed royal inscriptions and
+  the open chronicle/king-list/eponym texts. For the Assyrian & Babylonian material,
+  filter with `period='Neo-Assyrian'`, `'Neo-Babylonian'`, or `'Achaemenid'`.
+
 - **`alexandria-rag`** is the only one that can't be copied wholesale, because its
   value is *your own* PDF library. It uses semantic search (FAISS) rather than
   keyword search. Building it needs extra Python packages and its own careful
@@ -472,6 +522,14 @@ file (things like `preferences`) exactly as they are.
     "wordnet": {
       "command": "/Volumes/DRIVE/mcp_env/bin/python",
       "args": ["/Volumes/DRIVE/WordNet/wordnet_mcp_server.py"]
+    },
+    "chronography": {
+      "command": "/Volumes/DRIVE/mcp_env/bin/python",
+      "args": ["/Volumes/DRIVE/Chronography/chronography_mcp_server.py"]
+    },
+    "cuneiform-chronicles": {
+      "command": "/Volumes/DRIVE/mcp_env/bin/python",
+      "args": ["/Volumes/DRIVE/Cuneiform/cuneiform_mcp_server.py"]
     },
     "alexandria-rag": {
       "command": "/Volumes/DRIVE/Alexandria/RAG_system/rag_env/bin/python",

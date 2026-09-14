@@ -9,7 +9,7 @@
 #   ./servers restart <name>            # stop then start
 #   ./servers tail <name> [N]           # tail last N lines of the log (default 50)
 #
-# Services: rag-ui  rag-mcp  greek-mcp  latin-mcp  perseus-mcp  wikispooks-mcp  pleiades-mcp  wikipedia-mcp  scriptures-mcp  gutenberg-mcp  papyri-mcp  rr-dash
+# Services: rag-ui  rag-mcp  greek-mcp  latin-mcp  perseus-mcp  wikispooks-mcp  pleiades-mcp  wikipedia-mcp  scriptures-mcp  gutenberg-mcp  papyri-mcp  astrology-mcp  wordnet-mcp  chronography-mcp  cuneiform-mcp  rr-dash
 #
 # PID files: /tmp/rr-<name>.pid
 # Log files: ~/Library/Logs/RR/<name>.log
@@ -42,7 +42,7 @@ mkdir -p "$LOG_DIR"
 # config; running it standalone from a shell is rarely useful.
 
 # rag-ui moved 5000 → 5050 on 2026-07-02: macOS AirPlay Receiver squats on 5000.
-svc_port()    { case "$1" in rag-ui) echo 5050;; rag-mcp) echo stdio;; greek-mcp) echo stdio;; latin-mcp) echo stdio;; perseus-mcp) echo stdio;; wikispooks-mcp) echo stdio;; pleiades-mcp) echo stdio;; wikipedia-mcp) echo stdio;; scriptures-mcp) echo stdio;; gutenberg-mcp) echo stdio;; papyri-mcp) echo stdio;; rr-dash) echo 8765;; esac; }
+svc_port()    { case "$1" in rag-ui) echo 5050;; rag-mcp) echo stdio;; greek-mcp) echo stdio;; latin-mcp) echo stdio;; perseus-mcp) echo stdio;; wikispooks-mcp) echo stdio;; pleiades-mcp) echo stdio;; wikipedia-mcp) echo stdio;; scriptures-mcp) echo stdio;; gutenberg-mcp) echo stdio;; papyri-mcp) echo stdio;; astrology-mcp) echo stdio;; wordnet-mcp) echo stdio;; chronography-mcp) echo stdio;; cuneiform-mcp) echo stdio;; rr-dash) echo 8765;; esac; }
 svc_workdir() { case "$1" in
     # rag-ui MUST run from PRO-BLADE — the Documents "Alexandria RAG" copy is a
     # stale April 2026 snapshot (no health check, no incremental indexing).
@@ -58,6 +58,10 @@ svc_workdir() { case "$1" in
     scriptures-mcp) echo "/Volumes/PRO-BLADE/Scriptures";;
     gutenberg-mcp)  echo "/Volumes/PRO-BLADE/Gutenberg";;
     papyri-mcp)     echo "/Volumes/PRO-BLADE/Alexandria/Papyri";;
+    astrology-mcp)  echo "/Volumes/PRO-BLADE/Astrology";;
+    wordnet-mcp)    echo "/Volumes/PRO-BLADE/WordNet";;
+    chronography-mcp) echo "/Volumes/PRO-BLADE/Chronography";;
+    cuneiform-mcp)  echo "/Volumes/PRO-BLADE/Cuneiform";;
     rr-dash)        echo "$VAULT";;
 esac; }
 svc_cmd() { case "$1" in
@@ -76,6 +80,10 @@ svc_cmd() { case "$1" in
     scriptures-mcp) echo "arch -arm64 rag_env/bin/python scriptures_mcp_server.py";;
     gutenberg-mcp)  echo "arch -arm64 rag_env/bin/python gutenberg_mcp_server.py";;
     papyri-mcp)     echo "arch -arm64 rag_env/bin/python papyri_mcp_server.py";;
+    astrology-mcp)  echo "arch -arm64 astro_env/bin/python astrology_mcp_server.py";;
+    wordnet-mcp)    echo "arch -arm64 rag_env/bin/python wordnet_mcp_server.py";;
+    chronography-mcp) echo "arch -arm64 rag_env/bin/python chronography_mcp_server.py";;
+    cuneiform-mcp)  echo "arch -arm64 rag_env/bin/python cuneiform_mcp_server.py";;
     rr-dash)        echo "arch -arm64 python3 dashboard.py";;
 esac; }
 svc_needs() { case "$1" in
@@ -90,12 +98,16 @@ svc_needs() { case "$1" in
     scriptures-mcp) echo "problade";;
     gutenberg-mcp)  echo "problade";;
     papyri-mcp)    echo "problade";;
+    astrology-mcp) echo "problade";;
+    wordnet-mcp)   echo "problade";;
+    chronography-mcp) echo "problade";;
+    cuneiform-mcp) echo "problade";;
     rr-dash)        echo "";;
 esac; }
 svc_note() { case "$1" in
     rag-ui)         echo "Alexandria RAG Web UI";;
     rag-mcp)        echo "Alexandria RAG — MCP (managed by Claude Desktop/Cowork)";;
-    greek-mcp)      echo "Greek Resources — MCP (managed by Claude Desktop/Cowork)";;
+    greek-mcp)      echo "Greek Resources — MCP: 8 NT editions (Byzantine/SBLGNT/NA28/NA27/Tyndale/Tregelles/WH/TR) + LXX (Swete+Theodotion) + LSJ/Middle Liddell/Smith/Galen (managed by Claude Desktop/Cowork)";;
     latin-mcp)      echo "Latin Resources — MCP (managed by Claude Desktop/Cowork)";;
     perseus-mcp)    echo "Perseus canonical library — MCP (managed by Claude Desktop/Cowork)";;
     wikispooks-mcp) echo "WikiSpooks — MCP, full wiki ~37.7k articles (managed by Claude Desktop/Cowork)";;
@@ -104,6 +116,10 @@ svc_note() { case "$1" in
     scriptures-mcp) echo "Scriptures — MCP, Qur'an/Enoch/Tanakh/Talmud/Mishnah + Ethiopian canon (managed by Claude Desktop/Cowork)";;
     gutenberg-mcp)  echo "Project Gutenberg — MCP, public-domain books by subject (managed by Claude Desktop/Cowork)";;
     papyri-mcp)     echo "Papyri (DDbDP) — MCP, ~67.6k documentary papyri, CC BY (managed by Claude Desktop/Cowork)";;
+    astrology-mcp)  echo "Astrology — MCP, offline natal/synastry/sky via kerykeion (managed by Claude Desktop/Cowork)";;
+    wordnet-mcp)    echo "WordNet — MCP, Open English WordNet 107k synsets, CC BY (managed by Claude Desktop/Cowork)";;
+    chronography-mcp) echo "Chronography — MCP, Eusebius (Latin+Armenian/German) + Syncellus, 2,708 segs, PD (managed by Claude Desktop/Cowork)";;
+    cuneiform-mcp)  echo "Cuneiform Chronicles — MCP, ~11.8k CDLI royal inscriptions & historiographic texts (managed by Claude Desktop/Cowork)";;
     rr-dash)        echo "This dashboard (status only — won't kill itself)";;
 esac; }
 
@@ -111,7 +127,7 @@ esac; }
 # servers (rag-mcp / greek-mcp / wikispooks-mcp / pleiades-mcp are launched by
 # Claude Desktop over stdio, not from this wrapper).
 CONTROLLABLE="rag-ui"
-ALL_SERVICES="rag-ui rag-mcp greek-mcp latin-mcp perseus-mcp wikispooks-mcp pleiades-mcp wikipedia-mcp scriptures-mcp gutenberg-mcp papyri-mcp rr-dash"
+ALL_SERVICES="rag-ui rag-mcp greek-mcp latin-mcp perseus-mcp wikispooks-mcp pleiades-mcp wikipedia-mcp scriptures-mcp gutenberg-mcp papyri-mcp astrology-mcp wordnet-mcp chronography-mcp cuneiform-mcp rr-dash"
 
 # ─────────────────────────────────────────────────────────────────────
 # Helpers

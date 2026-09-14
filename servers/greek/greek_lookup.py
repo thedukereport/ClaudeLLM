@@ -7,6 +7,7 @@ feedback_byzantine_standard.md). Use 'verse-byz' for the project standard;
 'verse' (SBLGNT) and 'editions' (multi-edition) remain for reference.
 
 Usage:
+  greek_lookup.py inventory                    # list every installed Bible edition + lexicon (8 NT editions + LXX)
   greek_lookup.py verse-byz <reference>        # Byzantine reading + divergence flag (PRIMARY NT)
   greek_lookup.py lsj <greek-or-translit>      # LSJ entry
   greek_lookup.py verse <reference>            # SBLGNT verse(s) [reference]
@@ -1376,6 +1377,36 @@ def search_smith_all(word, max_results=40):
 # ──────────────────────────────────────────────────────────────────────
 # CLI
 # ──────────────────────────────────────────────────────────────────────
+def inventory():
+    """One-shot summary of the Greek Bibles, lexica and corpora installed —
+    so a roster/summary doesn't undercount (there are 8 NT editions + the LXX,
+    not 'one Greek Bible')."""
+    def have(fn):
+        return "✓" if (ROOT / fn).exists() else "✗"
+    lines = [
+        "Greek Resources — installed inventory",
+        "",
+        "New Testament — 8 editions (see all at once with `editions <ref>`):",
+        "  Byzantine (PRIMARY standard), SBLGNT, NA28, NA27, Tyndale House,",
+        "  Tregelles, Westcott-Hort, Textus Receptus.",
+        f"  Per-edition tools: verse-byz (Byzantine), verse (SBLGNT), TAGNT tagged NT {have('tagnt-index.json')}",
+        "",
+        "Old Testament — Septuagint (LXX):",
+        "  Swete (grc1); Theodotion (grc2) for Daniel / Susanna / Bel.",
+        "  Tools: lxx <ref>, lxx-editions <ref>, lxx-search <word>, lxx-books (57 books).",
+        "",
+        "Lexica:",
+        f"  LSJ {have('lsj-index.json')}   Middle Liddell {have('middle-liddell-index.json')}"
+        f"   Smith Geography {have('smith-geo-index.json')} / Biography {have('smith-bio-index.json')}"
+        f" / Antiquities {have('smith-ant-index.json')}",
+        "",
+        "Corpus: Perseus greekLit — corpus-search / corpus-authors (incl. Galen).",
+        "",
+        "Summary: 8 New Testament editions + the LXX (2 traditions) — not one Greek Bible.",
+    ]
+    return "\n".join(lines)
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -1553,6 +1584,8 @@ def main():
         print(result)
     elif cmd == 'corpus-authors':
         print(list_corpus_authors())
+    elif cmd in ('inventory', 'list', 'bibles'):
+        print(inventory())
     else:
         print(__doc__)
         sys.exit(1)

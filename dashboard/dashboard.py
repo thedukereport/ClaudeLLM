@@ -25,6 +25,9 @@ import subprocess
 import sys
 import datetime
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import rulings
 from html import escape
 from urllib.parse import quote, parse_qs
 
@@ -88,7 +91,7 @@ SERVICES = [
         "name": "greek-mcp",
         "port": "stdio",
         "controllable": False,
-        "note": "Greek Resources — MCP (managed by Claude Desktop / Cowork)",
+        "note": "Greek Resources — MCP: 8 NT editions (Byzantine/SBLGNT/NA28/NA27/Tyndale/Tregelles/WH/TR) + LXX (Swete+Theodotion) + LSJ/Middle Liddell/Smith/Galen (managed by Claude Desktop / Cowork)",
         "open_url": None,
     },
     {
@@ -145,6 +148,34 @@ SERVICES = [
         "port": "stdio",
         "controllable": False,
         "note": "Papyri (DDbDP) — MCP, ~67.6k documentary papyri, CC BY (managed by Claude Desktop / Cowork)",
+        "open_url": None,
+    },
+    {
+        "name": "astrology-mcp",
+        "port": "stdio",
+        "controllable": False,
+        "note": "Astrology — MCP, offline natal/synastry/sky charts via kerykeion (managed by Claude Desktop / Cowork)",
+        "open_url": None,
+    },
+    {
+        "name": "wordnet-mcp",
+        "port": "stdio",
+        "controllable": False,
+        "note": "WordNet — MCP, Open English WordNet (107k synsets), CC BY (managed by Claude Desktop / Cowork)",
+        "open_url": None,
+    },
+    {
+        "name": "chronography-mcp",
+        "port": "stdio",
+        "controllable": False,
+        "note": "Chronography — MCP, Eusebius (Jerome's Latin + Karst's German of the Armenian) + George Syncellus, 2,708 segments, public domain (managed by Claude Desktop / Cowork)",
+        "open_url": None,
+    },
+    {
+        "name": "cuneiform-mcp",
+        "port": "stdio",
+        "controllable": False,
+        "note": "Cuneiform Chronicles — MCP, ~11.8k CDLI royal inscriptions & historiographic texts (Assyrian/Babylonian + earlier), free re-use w/ attribution (managed by Claude Desktop / Cowork)",
         "open_url": None,
     },
     # Port-based background services.
@@ -252,6 +283,22 @@ def parse_lock_status() -> dict:
                 status[chnum] = ("DEFERRED", extract_date(full))
                 continue
 
+            # An open chapter says so. Read that before testing for a lock, so
+            # a "RE-LOCKED" inside a prior-history string cannot outvote the
+            # 🔓 standing in front of it.
+            #
+            # Added 2026-08-27. Until then 🔓 matched no rule here, so an
+            # unlocked chapter fell out of this dict entirely and the gate
+            # reported "(no status found)" — the same words it uses for a
+            # chapter with no heading at all, or a heading someone typo'd.
+            # Deliberately open and cannot-be-found are different conditions
+            # and were sharing one message. Nothing was ever mis-gated by it;
+            # the parser was reporting its own blind spot as the chapter's
+            # condition. Worked case: Ch. 25, unlocked all day 2026-08-27.
+            if "🔓" in prefix or re.search(r"\bUNLOCKED\b", prefix, re.IGNORECASE):
+                status[chnum] = ("UNLOCKED", extract_date(full))
+                continue
+
             has_lock = (
                 "🔒" in prefix
                 or "✅" in prefix
@@ -299,7 +346,12 @@ def parse_lock_status() -> dict:
     # file sync — the dashboard shows OUT OF SYNC in red instead of silently
     # keeping the stale label. Added after two locks in two days reached
     # Project State but not Book Structure or the Punch List table.
-    for chnum, ps_date in parse_project_state_locks().items():
+    # Only a LOCKED declaration can raise the alarm. An UNLOCKED declaration
+    # is Project State agreeing that the chapter is open, which is not drift
+    # (2026-08-27 — the old parser could not represent an unlock at all).
+    for chnum, (ps_state, ps_date) in parse_project_state_locks().items():
+        if ps_state != "LOCKED":
+            continue
         label, _d = status.get(chnum, (None, ""))
         if label != "LOCKED":
             status[chnum] = ("OUT OF SYNC", ps_date)
@@ -308,15 +360,27 @@ def parse_lock_status() -> dict:
 
 
 def parse_project_state_locks() -> dict:
-    """Lock declarations from Project State's '## Active chapter' section.
+    """Latest declared lock state per chapter, from Project State's
+    '## Active chapter' section. Returns {chapter_number: (state, date)}
+    where state is "LOCKED" or "UNLOCKED".
 
-    Only that section is read — it is curated current state. The decision log
-    is history (it keeps old "Ch. N LOCKED" entries for chapters legitimately
-    unlocked later) and would produce false drift alarms.
+    Only that section is read — the decision log below it is history and would
+    produce false alarms.
 
-    Matches "**Ch. N ... LOCKED ...**" bullets; RE-LOCKED counts as locked;
-    UNLOCKED never matches (no word boundary inside "UNLOCKED"). Returns
-    {chapter_number: latest-date-on-line}.
+    THE RULE IS: LATEST DATE WINS. Not first bullet, not last bullet.
+    Position in the file is a writing habit; the date is the fact. Mr. Duke
+    adds new bullets at the top, the section accumulates, and both orderings
+    are therefore wrong. Bullets without a date are ignored — an undated
+    state change cannot be ordered against a dated one.
+
+    Rewritten 2026-08-27. The previous version matched only "LOCKED" and
+    "RE-LOCKED" and took whichever matched last, which produced two failures
+    at once. It could see a chapter being locked but never being UNLOCKED —
+    the word contains no boundary before "LOCKED", so an unlock was invisible
+    and the parser only ever accumulated locks. And when Ch. 25 was unlocked
+    that day, a stale "RE-LOCKED 2026-08-04" bullet still sitting lower in the
+    section won on position, so the dashboard reported OUT OF SYNC against an
+    unlock that had been correctly recorded in all four sources.
     """
     out = {}
     if not PROJECT_STATE.exists():
@@ -328,10 +392,31 @@ def parse_project_state_locks() -> dict:
     if not m:
         return out
     for line in m.group(1).splitlines():
-        lm = re.search(r"\*\*Ch\.\s*(\d+)\b[^*]*?\bLOCKED\b", line)
-        if lm:
-            dates = re.findall(r"\d{4}-\d{2}-\d{2}", line)
-            out[int(lm.group(1))] = max(dates) if dates else ""
+        # Case-insensitive since 2026-08-27. The pattern had been case-sensitive,
+        # so "- **Ch. 10 — re-locked 2026-08-26 (rev. 12).**" was invisible to it
+        # — a correctly written entry ignored over one capital letter, which then
+        # reported a six-day-stale date from an older line further down the file.
+        # GREEDY, so the LAST lock-word in the bullet wins, not the first.
+        # Fixed 2026-09-07, found by Mr. Duke asking which locked chapters are
+        # open. The pattern was non-greedy, so a bullet narrating a completed
+        # cycle — "**Ch. 26 — unlocked, edited and re-locked 2026-09-04.**" —
+        # matched on "unlocked" and reported the START state as the current one.
+        # Ch. 17 and Ch. 26 were both being reported OUT OF SYNC against Book
+        # Structure headings that correctly read RE-LOCKED. A bullet narrates
+        # chronologically, so within one bullet the last state is the current
+        # state. Regression-tested against eight real bullets from this file:
+        # non-greedy scored 5/8, greedy 8/8.
+        lm = re.search(r"\*\*Ch\.\s*(\d+)\b[^*]*\b(UN)?(?:RE-)?LOCKED\b", line, re.IGNORECASE)
+        if not lm:
+            continue
+        dates = re.findall(r"\d{4}-\d{2}-\d{2}", line)
+        if not dates:
+            continue
+        chnum, date = int(lm.group(1)), max(dates)
+        state = "UNLOCKED" if lm.group(2) else "LOCKED"
+        prev = out.get(chnum)
+        if prev is None or date >= prev[1]:
+            out[chnum] = (state, date)
     return out
 
 
@@ -440,8 +525,23 @@ def parse_markdown_table(section_text: str) -> list[dict]:
         if header is None:
             header = cells
         else:
-            if len(cells) == len(header):
-                rows.append(dict(zip(header, cells)))
+            if len(cells) != len(header):
+                # A pipe inside the text — a quoted regex like `\bemerge(s|d)?`
+                # or `(?:quoted|cited)` — split one cell into several. Re-parse
+                # with the vault's tolerant splitter, which treats " | " as the
+                # separator and a bare "|" as content.
+                #
+                # Before 2026-09-07 the mismatch fell through to nothing and the
+                # row was DROPPED, silently, from every ledger table this reads.
+                # A parser that discards data without saying so is worse than one
+                # that crashes.
+                cells, how = rulings.table_cells(stripped, expected=len(header))
+                if how == "malformed":
+                    print(f"  ! malformed table row, {len(cells)} cells against "
+                          f"{len(header)} headers, skipped: {stripped[:80]}",
+                          file=sys.stderr)
+                    continue
+            rows.append(dict(zip(header, cells)))
     return rows
 
 
@@ -1189,6 +1289,18 @@ SERVERS_CSS = """
     word-break: break-word;
     max-height: 70vh;
   }
+
+.stat .slash { color: #b9b9b9; font-weight: 400; margin: 0 .10em; }
+.stat-wide { grid-column: span 2; }
+form.wpp { display: flex; align-items: center; gap: .5rem; margin-top: .45rem; flex-wrap: wrap; }
+form.wpp label { font-size: .74rem; color: #6a6a6a; display: flex; align-items: center; gap: .3rem; }
+form.wpp input { width: 4.2rem; padding: .18rem .3rem; font: inherit; font-size: .78rem;
+                 border: 1px solid #d5d5d5; border-radius: 4px; background: #fff; }
+form.wpp button { font: inherit; font-size: .74rem; padding: .2rem .55rem; cursor: pointer;
+                  border: 1px solid #d5d5d5; border-radius: 4px; background: #fafafa; color: #333; }
+form.wpp button:hover { background: #f0f0f0; }
+a.wpp-reset { font-size: .72rem; color: #8a8a8a; text-decoration: none; }
+a.wpp-reset:hover { text-decoration: underline; }
 """
 
 
@@ -1999,7 +2111,7 @@ def render_audit_overview() -> str:
 """
 
 
-def render_html():
+def render_html(prose_wpp: int = 443, notes_wpp: int = 473):
     chapters = gather_chapters()
     appendices = gather_appendices()
 
@@ -2016,6 +2128,34 @@ def render_html():
     drafts = [c for c in chapters if c["status"] not in ("LOCKED", "UNLOCKED", "OUT OF SYNC", "DEFERRED")]
     locked_words = sum(c["words"] for c in locked)
     pct_locked = (locked_words / total_chap * 100) if total_chap else 0
+
+    # ---- Estimated printed extent -------------------------------------
+    # Densities measured 2026-08-27 from T. Corey Brennan, *The Fasces*
+    # (Oxford UP, 2023) in Alexandria — 6.12 x 9.31 in, the standard trade
+    # academic octavo this book would most likely be set in. Sampled with
+    # pdftotext across 20 body pages and 15 endnote pages: body 443 words
+    # per page, notes 473 (notes are set smaller, so they run denser).
+    # Prose and notes are counted separately because a page of footnotes
+    # holds about 7 percent more words than a page of body text.
+    # Densities measured 2026-08-27 from T. Corey Brennan, *The Fasces*
+    # (Oxford UP) in Alexandria — 6.12 x 9.31 in, standard trade academic
+    # octavo. pdftotext across 20 body pages and 15 endnote pages gave 443
+    # words per body page and 473 per notes page; notes are set smaller, so
+    # they run about 7 percent denser. Both are overridable from the page
+    # (?wpp=&nwpp=) so a real publisher's spec can be dropped in.
+    PROSE_PER_PAGE = max(1, int(prose_wpp))
+    NOTES_PER_PAGE = max(1, int(notes_wpp))
+    chap_fn_words = sum(c["footnote_words"] for c in chapters)
+    app_fn_words = sum(a["footnote_words"] for a in appendices)
+    chap_prose_words = total_chap - chap_fn_words
+    app_prose_words = total_app - app_fn_words
+
+    est_chapter_pages = round(chap_prose_words / PROSE_PER_PAGE)
+    est_notes_pages = round(footnote_words / NOTES_PER_PAGE)
+    est_appendix_pages = round(app_prose_words / PROSE_PER_PAGE + app_fn_words / NOTES_PER_PAGE)
+    est_pages = est_chapter_pages + est_notes_pages + est_appendix_pages
+    est_prose_pages = est_chapter_pages + est_appendix_pages
+    pct_notes_pages = (est_notes_pages / est_pages * 100) if est_pages else 0
 
     max_words = max((c["words"] for c in chapters), default=1)
 
@@ -2073,10 +2213,30 @@ def render_html():
       <div class="value">{total_footnotes:,}</div>
       <div class="sub">{chap_footnotes:,} chapters · {app_footnotes:,} appendices</div>
     </div>
-    <div class="stat">
-      <div class="label">Footnote Words</div>
-      <div class="value">{footnote_words:,}</div>
-      <div class="sub">{(footnote_words / total * 100):.0f}% of total book words</div>
+    <div class="stat" title="Chapter prose only — every word outside a footnote definition. Set at {PROSE_PER_PAGE} words per page.">
+      <div class="label">Chapters — Words / Pages</div>
+      <div class="value">{chap_prose_words:,} <span class="slash">/</span> {est_chapter_pages:,}</div>
+      <div class="sub">{(chap_prose_words / total * 100):.0f}% of book words · {(est_chapter_pages / est_pages * 100):.0f}% of pages</div>
+    </div>
+    <div class="stat" title="Every footnote definition in chapters and appendices. Set at {NOTES_PER_PAGE} words per page — notes are set smaller than body text, so they run denser.">
+      <div class="label">Footnotes — Words / Pages</div>
+      <div class="value">{footnote_words:,} <span class="slash">/</span> {est_notes_pages:,}</div>
+      <div class="sub">{(footnote_words / total * 100):.0f}% of book words · {pct_notes_pages:.0f}% of pages</div>
+    </div>
+    <div class="stat" title="Appendix prose at {PROSE_PER_PAGE} words per page plus any appendix footnotes at {NOTES_PER_PAGE}.">
+      <div class="label">Appendices — Words / Pages</div>
+      <div class="value">{total_app:,} <span class="slash">/</span> {est_appendix_pages:,}</div>
+      <div class="sub">{len(appendices)} appendices · {(est_appendix_pages / est_pages * 100):.0f}% of pages</div>
+    </div>
+    <div class="stat stat-wide">
+      <div class="label">Printed Pages (est.)</div>
+      <div class="value">{est_pages:,}</div>
+      <form class="wpp" method="get" action="/">
+        <label>body <input type="number" name="wpp" value="{PROSE_PER_PAGE}" min="150" max="900" step="1"></label>
+        <label>notes <input type="number" name="nwpp" value="{NOTES_PER_PAGE}" min="150" max="900" step="1"></label>
+        <button type="submit">words / page</button>
+        <a class="wpp-reset" href="/?wpp=443&amp;nwpp=473" title="Measured from Brennan, The Fasces (Oxford UP), 6.12 x 9.31 in">reset</a>
+      </form>
     </div>
   </div>
 
@@ -2149,8 +2309,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
             os.execv(sys.executable, [sys.executable] + sys.argv)
             return  # not reached
 
-        if self.path in ("/", "/index.html"):
-            html = render_html().encode("utf-8")
+        if self.path in ("/", "/index.html") or self.path.startswith(("/?", "/index.html?")):
+            # Words-per-page is adjustable from the page so a real publisher's
+            # spec can replace the measured default without editing this file.
+            wpp, nwpp = 443, 473
+            if "?" in self.path:
+                q = parse_qs(self.path.split("?", 1)[1])
+                def _num(key, default):
+                    try:
+                        return min(900, max(150, int(q.get(key, [default])[0])))
+                    except (ValueError, TypeError):
+                        return default
+                wpp, nwpp = _num("wpp", 443), _num("nwpp", 473)
+            html = render_html(wpp, nwpp).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(html)))
