@@ -256,7 +256,11 @@ def api_start_indexing():
         data = request.get_json()
         books_dir = data.get('books_dir', '.')
         output_dir = data.get('output_dir', '.')
-        model = data.get('model', 'all-MiniLM-L6-v2')
+        # No default. Hard-coding one meant a click on Start Indexing could
+        # re-embed an e5 index as MiniLM -- same 384 dims, no error, every
+        # new vector unreachable. Absent here, index_books.py reads the
+        # model off embedding_model.json beside the index.
+        model = (data.get('model') or '').strip() or None
 
         # Atomic check-and-claim: without holding LOCK across BOTH the test and
         # the set, two near-simultaneous clicks can each pass the test before
@@ -348,7 +352,11 @@ def run_indexing(books_dir, output_dir, model):
         ib = Path(__file__).parent / 'index_books.py'
         emb_cmd = [sys.executable, str(ib), '--input', books_dir,
                    '--output', output_dir, '--cache-dir', cache_dir,
-                   '--model', model, '--embeddings-only', '--no-parallel-extract']
+                   '--embeddings-only', '--no-parallel-extract']
+        if model:
+            # A model named here is a deliberate choice, and this path rewrites
+            # every vector, so the change is coherent. Say so on the wire.
+            emb_cmd += ['--model', model, '--allow-model-change']
         proc = subprocess.Popen(emb_cmd, stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, text=True,
                                 cwd=str(Path(__file__).parent), env=child_env)

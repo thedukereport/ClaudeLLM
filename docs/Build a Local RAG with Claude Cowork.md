@@ -322,6 +322,29 @@ failed the same way for 512 minutes. Two habits close it: run each item inside
 its own `try/except` so a failure costs one item, and break any retry loop that
 completes a full pass without finishing anything.
 
+**Two 384-dimension models, one index.** `all-MiniLM-L6-v2` and
+`intfloat/multilingual-e5-small` produce vectors of the same width, so an index
+built with one accepts vectors from the other without a murmur. The rows land,
+the counts add up, the IVF rebuild reports 99.8% overlap against exact search,
+and the books appear in the library list with a healthy chunk count. They simply
+never come back from a query, because their vectors sit in a different region of
+the space than anything the query reaches. e5 compounds it: it is trained with a
+`passage: ` prefix on documents and `query: ` on searches, and the wrong model
+supplies neither.
+
+On 2026-09-15 an incremental run added 14,499 chunks that way — 42 freshly OCR'd
+books among them — because `run_incremental` built its embedder from argparse's
+default instead of reading `embedding_model.json`, the file sitting beside the
+index whose entire job is to record the answer. The dashboard's Start Indexing
+button had the same hard-coded default.
+
+The test that catches it takes ten seconds and needs no tooling: **take a chunk's
+own text out of the metadata and search for it verbatim.** A correctly embedded
+chunk returns itself at rank 1. An old book did; the new one returned a different
+book instead. `resolve_model()` now reads the model off the index for every path,
+and refuses outright when an explicit `--model` disagrees — a full rebuild that
+rewrites every vector can still change models with `--allow-model-change`.
+
 **What they have in common.** In each case the pipeline reported success, the
 counts looked reasonable, and the damage was only visible if you read the text.
 A count is not evidence. If you take one habit from this guide, take this one:
@@ -1544,6 +1567,42 @@ def prefixes_for(model_name: str) -> tuple:
     return "", ""
 
 
+def resolve_model(output_dir, requested, allow_change=False):
+    """Never guess which model built an index; read it off the index.
+
+    all-MiniLM-L6-v2 and intfloat/multilingual-e5-small are both 384-dim, so
+    embedding new chunks with the wrong one raises nothing at all. The vectors
+    land, the counts add up, the build reports a healthy overlap, and the new
+    books simply never come back from a search. On 2026-09-15 an incremental run
+    added 14,499 chunks that way -- every one of them unreachable -- because
+    run_incremental took argparse's default instead of reading the file sitting
+    beside the index that names the answer.
+    """
+    meta = Path(output_dir) / "embedding_model.json"
+    recorded = None
+    if meta.exists():
+        try:
+            recorded = (json.loads(meta.read_text()) or {}).get("model")
+        except Exception as e:
+            print(f"  ! could not read embedding_model.json: {e}", flush=True)
+    if not recorded:
+        return requested or MODEL_NAME
+    if requested and requested != recorded:
+        if allow_change:
+            print(f"Model change: {recorded} -> {requested}. Every vector is "
+                  f"rewritten in this run.", flush=True)
+            return requested
+        print(f"REFUSING TO RUN: this index was built with {recorded}, and "
+              f"--model says {requested}.", flush=True)
+        print("Both may be 384-dim, so nothing would stop the run and every "
+              "chunk it added would be unsearchable. To change models, "
+              "re-index from scratch (--allow-model-change).", flush=True)
+        sys.exit(2)
+    if not requested:
+        print(f"Model: {recorded}  (read from embedding_model.json)", flush=True)
+    return recorded
+
+
 def write_embedding_meta(output_dir, indexer):
     """Record WHICH model built this index, beside the index itself.
 
@@ -2390,13 +2449,20 @@ def main():
     parser = argparse.ArgumentParser(description="Build FAISS index from book collection")
     parser.add_argument("--input", required=True, help="Directory containing books")
     parser.add_argument("--output", default=".", help="Output directory for index")
-    parser.add_argument("--model", default=MODEL_NAME, help="SentenceTransformer model name")
+    parser.add_argument("--model", default=None,
+                        help="SentenceTransformer model name. Omit it: the model that "
+                             "built the index is read from embedding_model.json.")
     parser.add_argument("--include-epub", action="store_true", default=False,
                         help="Include EPUB files in addition to PDFs (default: PDFs only)")
     parser.add_argument("--detect-duplicates", action="store_true", default=False,
                         help="Enable duplicate detection during indexing (generates detailed report)")
     parser.add_argument("--similarity-threshold", type=float, default=DUPLICATE_SIMILARITY_THRESHOLD,
                         help=f"Similarity threshold for duplicate detection (default: {DUPLICATE_SIMILARITY_THRESHOLD})")
+    parser.add_argument("--allow-model-change", action="store_true", default=False,
+                        help="Permit a model that disagrees with embedding_model.json. "
+                             "Only for a FULL rebuild that rewrites every vector — "
+                             "mixing two models in one index makes the newer half "
+                             "unsearchable and reports nothing wrong.")
     parser.add_argument("--embeddings-only", action="store_true", default=False,
                         help="STAGE 1: extract + embed + save .npy and metadata, then EXIT "
                              "(no FAISS index built). Build the index afterward with "
@@ -2424,6 +2490,11 @@ def main():
                              "added/changed/removed, then EXIT without embedding. Diagnostic only.")
 
     args = parser.parse_args()
+    # Resolve the model BEFORE anything embeds, so every path -- full,
+    # --embeddings-only and --incremental alike -- uses the one that built
+    # this index, and an explicit mismatch stops the run instead of
+    # quietly filling it with vectors no query will ever reach.
+    args.model = resolve_model(args.output, args.model, args.allow_model_change)
     cache_dir = args.cache_dir or str(Path(args.output) / "text_cache")
 
     if args.scan_only:
@@ -2838,7 +2909,11 @@ def api_start_indexing():
         data = request.get_json()
         books_dir = data.get('books_dir', '.')
         output_dir = data.get('output_dir', '.')
-        model = data.get('model', 'all-MiniLM-L6-v2')
+        # No default. Hard-coding one meant a click on Start Indexing could
+        # re-embed an e5 index as MiniLM -- same 384 dims, no error, every
+        # new vector unreachable. Absent here, index_books.py reads the
+        # model off embedding_model.json beside the index.
+        model = (data.get('model') or '').strip() or None
 
         # Atomic check-and-claim: without holding LOCK across BOTH the test and
         # the set, two near-simultaneous clicks can each pass the test before
@@ -2930,7 +3005,11 @@ def run_indexing(books_dir, output_dir, model):
         ib = Path(__file__).parent / 'index_books.py'
         emb_cmd = [sys.executable, str(ib), '--input', books_dir,
                    '--output', output_dir, '--cache-dir', cache_dir,
-                   '--model', model, '--embeddings-only', '--no-parallel-extract']
+                   '--embeddings-only', '--no-parallel-extract']
+        if model:
+            # A model named here is a deliberate choice, and this path rewrites
+            # every vector, so the change is coherent. Say so on the wire.
+            emb_cmd += ['--model', model, '--allow-model-change']
         proc = subprocess.Popen(emb_cmd, stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, text=True,
                                 cwd=str(Path(__file__).parent), env=child_env)
@@ -3581,6 +3660,7 @@ Connects to Claude Desktop / Cowork via stdio transport.
 """
 
 import json
+import shlex
 import subprocess
 import sys
 import os
@@ -3662,20 +3742,52 @@ def _update_running():
         return False
 
 
-def start_update():
+def _full_command():
+    """Re-embed EVERY chunk from the text cache, then rebuild the index.
+
+    Two stages, the way the dashboard does it. Stage one streams vectors
+    straight to a memmap, so the whole corpus never sits in RAM at once; stage
+    two builds FAISS in a torch-free process, keeping the tuned nlist/nprobe.
+    Neither stage names a model, so both read embedding_model.json and use the
+    one that built the index.
+    """
+    try:
+        params = json.loads((INDEX_DIR / "index_params.json").read_text())
+    except Exception:
+        params = {}
+    stage1 = [sys.executable, str(RAG_DIR / "index_books.py"),
+              "--input", _books_dir(), "--output", str(INDEX_DIR),
+              "--cache-dir", str(INDEX_DIR / "text_cache"),
+              "--embeddings-only", "--no-parallel-extract"]
+    stage2 = [sys.executable, str(RAG_DIR / "build_index_cli.py"),
+              "--index-dir", str(INDEX_DIR),
+              "--index-type", params.get("index_type", "ivfflat"),
+              "--metric", params.get("metric", "ip"),
+              "--from-npy", str(INDEX_DIR / "alexandria_embeddings.npy"),
+              "--nlist", str(params.get("nlist", 1024)),
+              "--nprobe", str(params.get("nprobe", 128))]
+    joined = " ".join(shlex.quote(a) for a in stage1) + " && " + \
+             " ".join(shlex.quote(a) for a in stage2)
+    return ["/bin/sh", "-c", joined]
+
+
+def start_update(full=False):
     if _update_running():
         return "An index update is already running. Call update_index_status."
-    cmd = [sys.executable, str(RAG_DIR / "index_books.py"),
-           "--input", _books_dir(), "--output", str(INDEX_DIR), "--incremental"]
+    cmd = _full_command() if full else [
+        sys.executable, str(RAG_DIR / "index_books.py"),
+        "--input", _books_dir(), "--output", str(INDEX_DIR), "--incremental"]
     fh = open(UPDATE_LOG, "w")
     fh.write("started %s\n%s\n\n" % (time.strftime("%Y-%m-%d %H:%M:%S %Z"), " ".join(cmd)))
     fh.flush()
     proc = subprocess.Popen(cmd, cwd=str(RAG_DIR), stdout=fh, stderr=subprocess.STDOUT,
                             stdin=subprocess.DEVNULL, start_new_session=True)
     UPDATE_PID.write_text(str(proc.pid))
-    return ("Index update started (pid %d). It embeds only new and changed books.\n"
-            "Call update_index_status for progress; the log is %s"
-            % (proc.pid, UPDATE_LOG))
+    what = ("Full re-embed started (pid %d). Every chunk is embedded again from "
+            "the text cache, then the index is rebuilt." if full else
+            "Index update started (pid %d). It embeds only new and changed books.")
+    return (what % proc.pid) + ("\nCall update_index_status for progress; "
+                                "the log is %s" % UPDATE_LOG)
 
 
 def update_status(tail=20):
@@ -3755,9 +3867,21 @@ def handle_tools_list(params):
                     "Fold new and changed books into the Alexandria index "
                     "(index_books.py --incremental). Runs on Mr. Duke's Mac, in "
                     "the background, and returns at once. Use after books are "
-                    "added, OCR'd or renamed. Call update_index_status to watch it."
+                    "added, OCR'd or renamed. Call update_index_status to watch it. "
+                    "Pass full=true to re-embed EVERY chunk from the text cache "
+                    "instead — the repair for an index whose newer vectors were "
+                    "written by the wrong model."
                 ),
-                "inputSchema": {"type": "object", "properties": {}}
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "full": {
+                            "type": "boolean",
+                            "description": "Re-embed every chunk, not just new and changed books",
+                            "default": False
+                        }
+                    }
+                }
             },
             {
                 "name": "update_index_status",
@@ -3807,7 +3931,8 @@ def handle_tools_call(params):
 
     if tool_name == "update_index":
         try:
-            return {"content": [{"type": "text", "text": start_update()}]}
+            return {"content": [{"type": "text",
+                                 "text": start_update(bool(args.get("full", False)))}]}
         except Exception as e:
             return {"content": [{"type": "text", "text": f"update_index error: {e}"}],
                     "isError": True}

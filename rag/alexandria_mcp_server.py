@@ -10,6 +10,7 @@ Connects to Claude Desktop / Cowork via stdio transport.
 """
 
 import json
+import shlex
 import subprocess
 import sys
 import os
@@ -91,20 +92,52 @@ def _update_running():
         return False
 
 
-def start_update():
+def _full_command():
+    """Re-embed EVERY chunk from the text cache, then rebuild the index.
+
+    Two stages, the way the dashboard does it. Stage one streams vectors
+    straight to a memmap, so the whole corpus never sits in RAM at once; stage
+    two builds FAISS in a torch-free process, keeping the tuned nlist/nprobe.
+    Neither stage names a model, so both read embedding_model.json and use the
+    one that built the index.
+    """
+    try:
+        params = json.loads((INDEX_DIR / "index_params.json").read_text())
+    except Exception:
+        params = {}
+    stage1 = [sys.executable, str(RAG_DIR / "index_books.py"),
+              "--input", _books_dir(), "--output", str(INDEX_DIR),
+              "--cache-dir", str(INDEX_DIR / "text_cache"),
+              "--embeddings-only", "--no-parallel-extract"]
+    stage2 = [sys.executable, str(RAG_DIR / "build_index_cli.py"),
+              "--index-dir", str(INDEX_DIR),
+              "--index-type", params.get("index_type", "ivfflat"),
+              "--metric", params.get("metric", "ip"),
+              "--from-npy", str(INDEX_DIR / "alexandria_embeddings.npy"),
+              "--nlist", str(params.get("nlist", 1024)),
+              "--nprobe", str(params.get("nprobe", 128))]
+    joined = " ".join(shlex.quote(a) for a in stage1) + " && " + \
+             " ".join(shlex.quote(a) for a in stage2)
+    return ["/bin/sh", "-c", joined]
+
+
+def start_update(full=False):
     if _update_running():
         return "An index update is already running. Call update_index_status."
-    cmd = [sys.executable, str(RAG_DIR / "index_books.py"),
-           "--input", _books_dir(), "--output", str(INDEX_DIR), "--incremental"]
+    cmd = _full_command() if full else [
+        sys.executable, str(RAG_DIR / "index_books.py"),
+        "--input", _books_dir(), "--output", str(INDEX_DIR), "--incremental"]
     fh = open(UPDATE_LOG, "w")
     fh.write("started %s\n%s\n\n" % (time.strftime("%Y-%m-%d %H:%M:%S %Z"), " ".join(cmd)))
     fh.flush()
     proc = subprocess.Popen(cmd, cwd=str(RAG_DIR), stdout=fh, stderr=subprocess.STDOUT,
                             stdin=subprocess.DEVNULL, start_new_session=True)
     UPDATE_PID.write_text(str(proc.pid))
-    return ("Index update started (pid %d). It embeds only new and changed books.\n"
-            "Call update_index_status for progress; the log is %s"
-            % (proc.pid, UPDATE_LOG))
+    what = ("Full re-embed started (pid %d). Every chunk is embedded again from "
+            "the text cache, then the index is rebuilt." if full else
+            "Index update started (pid %d). It embeds only new and changed books.")
+    return (what % proc.pid) + ("\nCall update_index_status for progress; "
+                                "the log is %s" % UPDATE_LOG)
 
 
 def update_status(tail=20):
@@ -184,9 +217,21 @@ def handle_tools_list(params):
                     "Fold new and changed books into the Alexandria index "
                     "(index_books.py --incremental). Runs on Mr. Duke's Mac, in "
                     "the background, and returns at once. Use after books are "
-                    "added, OCR'd or renamed. Call update_index_status to watch it."
+                    "added, OCR'd or renamed. Call update_index_status to watch it. "
+                    "Pass full=true to re-embed EVERY chunk from the text cache "
+                    "instead — the repair for an index whose newer vectors were "
+                    "written by the wrong model."
                 ),
-                "inputSchema": {"type": "object", "properties": {}}
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "full": {
+                            "type": "boolean",
+                            "description": "Re-embed every chunk, not just new and changed books",
+                            "default": False
+                        }
+                    }
+                }
             },
             {
                 "name": "update_index_status",
@@ -236,7 +281,8 @@ def handle_tools_call(params):
 
     if tool_name == "update_index":
         try:
-            return {"content": [{"type": "text", "text": start_update()}]}
+            return {"content": [{"type": "text",
+                                 "text": start_update(bool(args.get("full", False)))}]}
         except Exception as e:
             return {"content": [{"type": "text", "text": f"update_index error: {e}"}],
                     "isError": True}

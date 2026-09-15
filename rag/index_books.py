@@ -140,6 +140,42 @@ def prefixes_for(model_name: str) -> tuple:
     return "", ""
 
 
+def resolve_model(output_dir, requested, allow_change=False):
+    """Never guess which model built an index; read it off the index.
+
+    all-MiniLM-L6-v2 and intfloat/multilingual-e5-small are both 384-dim, so
+    embedding new chunks with the wrong one raises nothing at all. The vectors
+    land, the counts add up, the build reports a healthy overlap, and the new
+    books simply never come back from a search. On 2026-09-15 an incremental run
+    added 14,499 chunks that way -- every one of them unreachable -- because
+    run_incremental took argparse's default instead of reading the file sitting
+    beside the index that names the answer.
+    """
+    meta = Path(output_dir) / "embedding_model.json"
+    recorded = None
+    if meta.exists():
+        try:
+            recorded = (json.loads(meta.read_text()) or {}).get("model")
+        except Exception as e:
+            print(f"  ! could not read embedding_model.json: {e}", flush=True)
+    if not recorded:
+        return requested or MODEL_NAME
+    if requested and requested != recorded:
+        if allow_change:
+            print(f"Model change: {recorded} -> {requested}. Every vector is "
+                  f"rewritten in this run.", flush=True)
+            return requested
+        print(f"REFUSING TO RUN: this index was built with {recorded}, and "
+              f"--model says {requested}.", flush=True)
+        print("Both may be 384-dim, so nothing would stop the run and every "
+              "chunk it added would be unsearchable. To change models, "
+              "re-index from scratch (--allow-model-change).", flush=True)
+        sys.exit(2)
+    if not requested:
+        print(f"Model: {recorded}  (read from embedding_model.json)", flush=True)
+    return recorded
+
+
 def write_embedding_meta(output_dir, indexer):
     """Record WHICH model built this index, beside the index itself.
 
@@ -986,13 +1022,20 @@ def main():
     parser = argparse.ArgumentParser(description="Build FAISS index from book collection")
     parser.add_argument("--input", required=True, help="Directory containing books")
     parser.add_argument("--output", default=".", help="Output directory for index")
-    parser.add_argument("--model", default=MODEL_NAME, help="SentenceTransformer model name")
+    parser.add_argument("--model", default=None,
+                        help="SentenceTransformer model name. Omit it: the model that "
+                             "built the index is read from embedding_model.json.")
     parser.add_argument("--include-epub", action="store_true", default=False,
                         help="Include EPUB files in addition to PDFs (default: PDFs only)")
     parser.add_argument("--detect-duplicates", action="store_true", default=False,
                         help="Enable duplicate detection during indexing (generates detailed report)")
     parser.add_argument("--similarity-threshold", type=float, default=DUPLICATE_SIMILARITY_THRESHOLD,
                         help=f"Similarity threshold for duplicate detection (default: {DUPLICATE_SIMILARITY_THRESHOLD})")
+    parser.add_argument("--allow-model-change", action="store_true", default=False,
+                        help="Permit a model that disagrees with embedding_model.json. "
+                             "Only for a FULL rebuild that rewrites every vector — "
+                             "mixing two models in one index makes the newer half "
+                             "unsearchable and reports nothing wrong.")
     parser.add_argument("--embeddings-only", action="store_true", default=False,
                         help="STAGE 1: extract + embed + save .npy and metadata, then EXIT "
                              "(no FAISS index built). Build the index afterward with "
@@ -1020,6 +1063,11 @@ def main():
                              "added/changed/removed, then EXIT without embedding. Diagnostic only.")
 
     args = parser.parse_args()
+    # Resolve the model BEFORE anything embeds, so every path -- full,
+    # --embeddings-only and --incremental alike -- uses the one that built
+    # this index, and an explicit mismatch stops the run instead of
+    # quietly filling it with vectors no query will ever reach.
+    args.model = resolve_model(args.output, args.model, args.allow_model_change)
     cache_dir = args.cache_dir or str(Path(args.output) / "text_cache")
 
     if args.scan_only:
