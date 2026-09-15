@@ -21,6 +21,7 @@ You don't need to follow the guides by hand. **Open Claude Cowork (or Claude Des
 BOOTSTRAP.md         ← give this to Claude to build the stack
 docs/                ← the detailed human guides
 rag/                 ← the local PDF-library RAG + web dashboard
+ocr/                 ← give scanned books a text layer (writes copies, never originals)
 servers/             ← the MCP servers, each with its build script
   scriptures/  latin/  greek/  perseus/  papyri/
   pleiades/    wikipedia/  wikispooks/  gutenberg/  atlas/  astrology/  wordnet/
@@ -29,6 +30,10 @@ dashboard/           ← optional macOS control panel (author's example)
 ```
 
 **No texts are included.** Every `build_*.py` / `download_*.py` fetches its corpus from the original source, on *your* machine, at build time. This keeps the repo small and keeps each corpus under its own license.
+
+### What the RAG server hands Claude
+
+Four tools: `search_books` (semantic search over your library), `index_info` (what the index currently holds and how it is tuned), `update_index` (fold new and changed books in, in the background), and `update_index_status` (watch that run, and reload the index when it finishes). The last two exist so a Cowork session can index new books itself, on your machine, without you typing a command.
 
 ## The corpora (and licenses)
 

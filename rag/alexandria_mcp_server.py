@@ -10,8 +10,10 @@ Connects to Claude Desktop / Cowork via stdio transport.
 """
 
 import json
+import subprocess
 import sys
 import os
+import time
 from pathlib import Path
 
 # Add RAG system to path so we can import query_rag
@@ -43,6 +45,71 @@ def get_querier():
         # Log to stderr (visible in terminal, invisible to MCP)
         print(f"[alexandria] Index loaded: {len(_querier.metadata)} chunks", file=sys.stderr)
     return _querier
+
+
+# ── Incremental index update ───────────────────────────────────────
+# Indexing needs this machine: the embedding model, faiss and the venv all live
+# here. A Cowork session reaches the drive but not a shell on the Mac, so
+# without this tool every new book waits for someone to type a command.
+
+CONFIG = RAG_DIR / "rag_config.json"
+UPDATE_LOG = RAG_DIR / "index_update.log"
+UPDATE_PID = RAG_DIR / ".index_update.pid"
+
+
+def _books_dir():
+    try:
+        return json.loads(CONFIG.read_text())["books_dir"]
+    except Exception:
+        return str(INDEX_DIR / "PDF")
+
+
+def _update_running():
+    """True when an update launched by this tool is still alive."""
+    try:
+        pid = int(UPDATE_PID.read_text().strip())
+    except Exception:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def start_update():
+    if _update_running():
+        return "An index update is already running. Call update_index_status."
+    cmd = [sys.executable, str(RAG_DIR / "index_books.py"),
+           "--input", _books_dir(), "--output", str(INDEX_DIR), "--incremental"]
+    fh = open(UPDATE_LOG, "w")
+    fh.write("started %s\n%s\n\n" % (time.strftime("%Y-%m-%d %H:%M:%S %Z"), " ".join(cmd)))
+    fh.flush()
+    proc = subprocess.Popen(cmd, cwd=str(RAG_DIR), stdout=fh, stderr=subprocess.STDOUT,
+                            stdin=subprocess.DEVNULL, start_new_session=True)
+    UPDATE_PID.write_text(str(proc.pid))
+    return ("Index update started (pid %d). It embeds only new and changed books.\n"
+            "Call update_index_status for progress; the log is %s"
+            % (proc.pid, UPDATE_LOG))
+
+
+def update_status(tail=20):
+    running = _update_running()
+    try:
+        lines = UPDATE_LOG.read_text(errors="ignore").splitlines()
+    except Exception:
+        return "No update has been started from this tool yet."
+    if not running:
+        # The index on disk has moved; drop the loaded copy so the next search
+        # reads the new one instead of answering from the old vectors.
+        global _querier
+        _querier = None
+        try:
+            UPDATE_PID.unlink()
+        except OSError:
+            pass
+    head = "RUNNING" if running else "FINISHED (searches now reload the new index)"
+    return head + "\n" + "\n".join(lines[-tail:])
 
 
 # ── MCP Protocol (JSON-RPC over stdio) ─────────────────────────────
@@ -96,6 +163,33 @@ def handle_tools_list(params):
                     "nprobe). Use to confirm configuration, e.g. the active nprobe."
                 ),
                 "inputSchema": {"type": "object", "properties": {}}
+            },
+            {
+                "name": "update_index",
+                "description": (
+                    "Fold new and changed books into the Alexandria index "
+                    "(index_books.py --incremental). Runs on Mr. Duke's Mac, in "
+                    "the background, and returns at once. Use after books are "
+                    "added, OCR'd or renamed. Call update_index_status to watch it."
+                ),
+                "inputSchema": {"type": "object", "properties": {}}
+            },
+            {
+                "name": "update_index_status",
+                "description": (
+                    "Report whether the incremental index update is still running "
+                    "and show the last lines of its log."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "tail": {
+                            "type": "integer",
+                            "description": "How many log lines to show (default 20)",
+                            "default": 20
+                        }
+                    }
+                }
             }
         ]
     }
@@ -124,6 +218,21 @@ def handle_tools_call(params):
             return {"content": [{"type": "text", "text": "\n".join(lines)}]}
         except Exception as e:
             return {"content": [{"type": "text", "text": f"index_info error: {e}"}],
+                    "isError": True}
+
+    if tool_name == "update_index":
+        try:
+            return {"content": [{"type": "text", "text": start_update()}]}
+        except Exception as e:
+            return {"content": [{"type": "text", "text": f"update_index error: {e}"}],
+                    "isError": True}
+
+    if tool_name == "update_index_status":
+        try:
+            return {"content": [{"type": "text",
+                                 "text": update_status(int(args.get("tail", 20)))}]}
+        except Exception as e:
+            return {"content": [{"type": "text", "text": f"update_index_status error: {e}"}],
                     "isError": True}
 
     if tool_name != "search_books":

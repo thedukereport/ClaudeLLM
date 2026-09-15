@@ -243,11 +243,13 @@ Search quality is capped by extraction quality: a passage the extractor never re
 
 **Chunking sized from the model's real token limit.** Chunk size is no longer a constant. `chunk_params_for()` reads `max_seq_length` off the loaded model and derives words from it at roughly 1.45 subword tokens per word, with the overlap at a fifth of the chunk: a 512-token model such as e5-small takes **353 words with 70 of overlap**, where a 256-token model takes 200 with 40. Hard-coding one number meant that switching models in the dropdown silently mis-sized every chunk — too big and the tail of each one is truncated away unread, too small and you waste the model. Every chunk is normalized so search uses cosine similarity.
 
+**OCR that writes a copy and never the original.** A page-image PDF holds no words, so the extractor finds none and the book returns nothing forever. The `ocr/` scripts give it a text layer: each page renders at 300 dpi, tesseract reads the picture, and the recognised words go back onto the **original page object** as invisible text. No page is re-encoded, the result is written to a new ` - OCR.pdf`, and the runner refuses any source that already yields text. That last guard matters — `ocrmypdf --force-ocr` pointed at files that already had text grew one book from 4.2 MB to 1.24 GB and wrote a second copy of the words into 73 others.
+
 **A standalone health check (no re-indexing).** `scan_pdfs.py` — reachable from **Management → 🩺 PDF Health Check** — checks the library for corruption independently of indexing, in three modes: **incremental** (skip files unchanged since the last scan, per the manifest — the default), **verify** (re-hash even unchanged files), and **full** (rescan everything). Results stream to the dashboard and to `problem_pdfs.txt`. Add `--include-epub` to cover ebooks.
 
 **An alignment guard on every build.** Row *i* of the embeddings must map to metadata row *i*, or every search result gets attributed to the wrong book. `build_index_cli.py` refuses to build from an embeddings file whose row count disagrees with `alexandria_metadata.json`, and falls back to reconstructing exact vectors from the live index when a saved `.npy` is stale. This is why the two files are always written together.
 
-**Everyday cadence.** Drop new PDFs in, run **Update Index** (incremental), and periodically run the **PDF Health Check** to catch newly-added damaged files. To preview exactly what an incremental run will do without touching anything, run it from Terminal with `--incremental --dry-run`: it reports manifest/`.npy` presence, vector↔metadata alignment, any stale lock, and the precise add/change/remove counts, then exits.
+**Everyday cadence.** Drop new PDFs in, run **Update Index** (incremental) — from the dashboard, or by asking Claude to call the RAG server's `update_index` tool, which starts the same incremental pass in the background and reports progress through `update_index_status` — and periodically run the **PDF Health Check** to catch newly-added damaged files. To preview exactly what an incremental run will do without touching anything, run it from Terminal with `--incremental --dry-run`: it reports manifest/`.npy` presence, vector↔metadata alignment, any stale lock, and the precise add/change/remove counts, then exits.
 
 ---
 
@@ -299,6 +301,26 @@ cannot be retrieved even by an exact sentence copied off its own page. In a
 random sample of 60 books, **12 were affected**. `pdftotext -raw` follows the
 content stream instead and reads such a page correctly — comparing the two
 orderings on one page is a cheap detector for the whole library.
+
+**A white frame around the scan.** Some scanners photograph the page on a
+platen and pad the result out to a standard size, so the PDF page holds a gray
+scan sitting inside a pure-white border. Tesseract reads that whole image as one
+picture and returns nothing — no error, no warning, just an empty page. A. E.
+Waite's *Lives of Alchemystical Philosophers* (1888) came out of a 42-book OCR
+run at 25 words a page, with 279 of its 315 pages holding no text at all, while
+every other book in the run measured between 132 and 863. Cropping the frame away
+gave the same page 310 words and the book 95,699 in place of 7,934. Measure words
+per page after any OCR run: one number per book, and the broken one is obvious.
+`ocr/ocr_trim_borders.py` crops the frame, OCRs what is left, and pushes every
+word box back by the crop offset so the words still land in the right place.
+
+**One book's error ending the whole run.** A single page can render past what
+Pillow will open — 5,120 × 22,888 pixels at 300 dpi comes to 2.03 billion, and
+Pillow refuses over 0.18 billion. That raised an exception the runner did not
+catch, which ended the pass; the wrapper then restarted it, and the same book
+failed the same way for 512 minutes. Two habits close it: run each item inside
+its own `try/except` so a failure costs one item, and break any retry loop that
+completes a full pass without finishing anything.
 
 **What they have in common.** In each case the pipeline reported success, the
 counts looked reasonable, and the damage was only visible if you read the text.
@@ -3559,8 +3581,10 @@ Connects to Claude Desktop / Cowork via stdio transport.
 """
 
 import json
+import subprocess
 import sys
 import os
+import time
 from pathlib import Path
 
 # Add RAG system to path so we can import query_rag
@@ -3592,6 +3616,71 @@ def get_querier():
         # Log to stderr (visible in terminal, invisible to MCP)
         print(f"[alexandria] Index loaded: {len(_querier.metadata)} chunks", file=sys.stderr)
     return _querier
+
+
+# ── Incremental index update ───────────────────────────────────────
+# Indexing needs this machine: the embedding model, faiss and the venv all live
+# here. A Cowork session reaches the drive but not a shell on the Mac, so
+# without this tool every new book waits for someone to type a command.
+
+CONFIG = RAG_DIR / "rag_config.json"
+UPDATE_LOG = RAG_DIR / "index_update.log"
+UPDATE_PID = RAG_DIR / ".index_update.pid"
+
+
+def _books_dir():
+    try:
+        return json.loads(CONFIG.read_text())["books_dir"]
+    except Exception:
+        return str(INDEX_DIR / "PDF")
+
+
+def _update_running():
+    """True when an update launched by this tool is still alive."""
+    try:
+        pid = int(UPDATE_PID.read_text().strip())
+    except Exception:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def start_update():
+    if _update_running():
+        return "An index update is already running. Call update_index_status."
+    cmd = [sys.executable, str(RAG_DIR / "index_books.py"),
+           "--input", _books_dir(), "--output", str(INDEX_DIR), "--incremental"]
+    fh = open(UPDATE_LOG, "w")
+    fh.write("started %s\n%s\n\n" % (time.strftime("%Y-%m-%d %H:%M:%S %Z"), " ".join(cmd)))
+    fh.flush()
+    proc = subprocess.Popen(cmd, cwd=str(RAG_DIR), stdout=fh, stderr=subprocess.STDOUT,
+                            stdin=subprocess.DEVNULL, start_new_session=True)
+    UPDATE_PID.write_text(str(proc.pid))
+    return ("Index update started (pid %d). It embeds only new and changed books.\n"
+            "Call update_index_status for progress; the log is %s"
+            % (proc.pid, UPDATE_LOG))
+
+
+def update_status(tail=20):
+    running = _update_running()
+    try:
+        lines = UPDATE_LOG.read_text(errors="ignore").splitlines()
+    except Exception:
+        return "No update has been started from this tool yet."
+    if not running:
+        # The index on disk has moved; drop the loaded copy so the next search
+        # reads the new one instead of answering from the old vectors.
+        global _querier
+        _querier = None
+        try:
+            UPDATE_PID.unlink()
+        except OSError:
+            pass
+    head = "RUNNING" if running else "FINISHED (searches now reload the new index)"
+    return head + "\n" + "\n".join(lines[-tail:])
 
 
 # ── MCP Protocol (JSON-RPC over stdio) ─────────────────────────────
@@ -3636,6 +3725,42 @@ def handle_tools_list(params):
                     },
                     "required": ["query"]
                 }
+            },
+            {
+                "name": "index_info",
+                "description": (
+                    "Report the Alexandria index's current state: index type, "
+                    "chunk and book counts, metric, and IVF tuning (nlist / "
+                    "nprobe). Use to confirm configuration, e.g. the active nprobe."
+                ),
+                "inputSchema": {"type": "object", "properties": {}}
+            },
+            {
+                "name": "update_index",
+                "description": (
+                    "Fold new and changed books into the Alexandria index "
+                    "(index_books.py --incremental). Runs on Mr. Duke's Mac, in "
+                    "the background, and returns at once. Use after books are "
+                    "added, OCR'd or renamed. Call update_index_status to watch it."
+                ),
+                "inputSchema": {"type": "object", "properties": {}}
+            },
+            {
+                "name": "update_index_status",
+                "description": (
+                    "Report whether the incremental index update is still running "
+                    "and show the last lines of its log."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "tail": {
+                            "type": "integer",
+                            "description": "How many log lines to show (default 20)",
+                            "default": 20
+                        }
+                    }
+                }
             }
         ]
     }
@@ -3643,6 +3768,43 @@ def handle_tools_list(params):
 def handle_tools_call(params):
     tool_name = params.get("name")
     args = params.get("arguments", {})
+
+    if tool_name == "index_info":
+        try:
+            info = get_querier().get_index_info()
+            books = len(set(m["file"] for m in get_querier().metadata))
+            lines = [
+                "Alexandria index:",
+                f"  index type : {info.get('index_type')}",
+                f"  chunks     : {info.get('ntotal', 0):,}",
+                f"  books      : {books:,}",
+                f"  metric     : {info.get('metric')}",
+            ]
+            if "nlist" in info:
+                lines.append(f"  nlist      : {info['nlist']:,}")
+                lines.append(f"  nprobe     : {info['nprobe']}   "
+                             f"(searches ~{100*info['nprobe']//max(1, info['nlist'])}% of clusters)")
+            if "ef_search" in info:
+                lines.append(f"  ef_search  : {info['ef_search']}")
+            return {"content": [{"type": "text", "text": "\n".join(lines)}]}
+        except Exception as e:
+            return {"content": [{"type": "text", "text": f"index_info error: {e}"}],
+                    "isError": True}
+
+    if tool_name == "update_index":
+        try:
+            return {"content": [{"type": "text", "text": start_update()}]}
+        except Exception as e:
+            return {"content": [{"type": "text", "text": f"update_index error: {e}"}],
+                    "isError": True}
+
+    if tool_name == "update_index_status":
+        try:
+            return {"content": [{"type": "text",
+                                 "text": update_status(int(args.get("tail", 20)))}]}
+        except Exception as e:
+            return {"content": [{"type": "text", "text": f"update_index_status error: {e}"}],
+                    "isError": True}
 
     if tool_name != "search_books":
         return {
@@ -3742,7 +3904,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 ```
 
 ### `templates/base.html`
