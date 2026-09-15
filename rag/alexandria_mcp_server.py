@@ -65,11 +65,25 @@ def _books_dir():
 
 
 def _update_running():
-    """True when an update launched by this tool is still alive."""
+    """True when an update launched by this tool is still alive.
+
+    Reap before asking. This server is the run's parent and never waits on it,
+    so a finished run sits in the process table as a zombie and os.kill(pid, 0)
+    answers "alive" forever — on 2026-09-15 the index finished at 16:47 and the
+    status tool still read RUNNING twenty minutes later. waitpid tells the truth.
+    """
     try:
         pid = int(UPDATE_PID.read_text().strip())
     except Exception:
         return False
+    try:
+        reaped, _ = os.waitpid(pid, os.WNOHANG)
+        if reaped == pid:
+            return False
+    except ChildProcessError:
+        pass            # not our child: the server restarted since it began
+    except OSError:
+        pass
     try:
         os.kill(pid, 0)
         return True
