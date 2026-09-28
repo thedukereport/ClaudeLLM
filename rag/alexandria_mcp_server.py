@@ -37,9 +37,12 @@ def get_querier():
         sys.stdout = StringIO()
         try:
             from query_rag import RAGQuerier
+            # Do not name a model here: RAGQuerier reads embedding_model.json beside
+            # the index and uses whatever built it (falling back to its own default
+            # only if no sidecar exists). Naming one risked querying an e5 index with
+            # MiniLM — same 384 dims, silently wrong results.
             _querier = RAGQuerier(
-                index_dir=str(INDEX_DIR),
-                model_name="all-MiniLM-L6-v2"
+                index_dir=str(INDEX_DIR)
             )
         finally:
             sys.stdout = old_stdout

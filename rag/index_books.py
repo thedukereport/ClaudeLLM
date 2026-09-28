@@ -179,9 +179,11 @@ def resolve_model(output_dir, requested, allow_change=False):
 def write_embedding_meta(output_dir, indexer):
     """Record WHICH model built this index, beside the index itself.
 
-    Without this the querier defaults to all-MiniLM-L6-v2. multilingual-e5-small
-    is also 384-dim, so querying an e5 index with MiniLM raises no dimension
-    error -- it just returns quiet nonsense. This file is what prevents that."""
+    Without this the querier can only fall back to its built-in default model and
+    cannot know which one actually built the index. Two 384-dim models (e.g.
+    multilingual-e5-small and all-MiniLM-L6-v2) raise no dimension error when
+    mismatched -- the query just returns quiet nonsense. This file is what
+    prevents that by naming the model beside the index."""
     meta = {
         "model": getattr(indexer, "model_name", None),
         "dim": indexer.embedding_dim,
@@ -214,7 +216,7 @@ def chunk_params_for(model) -> tuple:
         return w, max(1, int(w * 0.2))
     return CHUNK_SIZE, CHUNK_OVERLAP
 CHUNK_OVERLAP = 40  # words of overlap between chunks
-MODEL_NAME = "all-MiniLM-L6-v2"  # Fast, effective, 384-dim embeddings
+MODEL_NAME = "intfloat/multilingual-e5-small"  # 384-dim; the model this library's indexes are built with. FALLBACK ONLY — resolve_model() reads embedding_model.json beside the index and uses that when present; this is used only when a fresh index has no sidecar yet.
 BATCH_SIZE = 128  # Batch size for embedding generation
 DUPLICATE_SIMILARITY_THRESHOLD = 0.95  # Threshold for flagging duplicates
 
@@ -1057,6 +1059,13 @@ def main():
                         help="Only process books that were ADDED, CHANGED or REMOVED since "
                              "the last index, re-embedding just those, then rebuild the index "
                              "(keeping its tuned nlist/nprobe/metric). Fast for small updates.")
+    parser.add_argument("--full-rebuild", action="store_true", default=False,
+                        help="Explicitly permit a FULL rebuild that re-embeds EVERY vector from "
+                             "scratch against an EXISTING index. Without this flag a "
+                             "non-incremental run over an existing index refuses to start: a full "
+                             "re-embed of the whole corpus OOM'd a 48 GB Mac on 2026-09-27. Use "
+                             "--incremental for normal updates; use this only for a deliberate, "
+                             "dedicated rebuild (close other apps; consider ALEX_EMBED_DEVICE=cpu).")
     parser.add_argument("--dry-run", action="store_true", default=False,
                         help="With --incremental: report health (manifest/.npy present, "
                              "vector↔metadata alignment, stale lock) and exactly what WOULD be "
@@ -1082,6 +1091,30 @@ def main():
     # reports whether a lock is present as part of its health check).
     if args.incremental and args.dry_run:
         return run_incremental(args, cache_dir, dry_run=True)
+
+    # GUARDRAIL: a non-incremental run re-embeds EVERY vector from scratch. Against
+    # an index that already exists that is the memory bomb -- a full re-embed of the
+    # ~2.2M-vector corpus drove a 48 GB Mac 47 GB into swap and OOM'd it (2026-09-27).
+    # Refuse unless the caller explicitly opts in with --full-rebuild, and point them
+    # at --incremental for ordinary updates. A first-ever build (no index yet) is not
+    # blocked. This runs BEFORE the lock so a refusal leaves no lock behind.
+    if not args.incremental and not args.full_rebuild:
+        idx = Path(args.output) / "alexandria.index"
+        meta = Path(args.output) / "alexandria_metadata.json"
+        if idx.exists() or meta.exists():
+            vecs = "?"
+            try:
+                vecs = f"{json.loads((Path(args.output) / 'index_params.json').read_text()).get('ntotal', '?'):,}"
+            except Exception:
+                pass
+            print(f"REFUSING: an index already exists in {args.output} and this is a FULL "
+                  f"rebuild, which re-embeds every vector ({vecs}) from scratch — the "
+                  "operation that OOM'd this machine on 2026-09-27.", flush=True)
+            print("  • Normal update (only new/changed/removed books):  add --incremental", flush=True)
+            print("  • Deliberate rebuild from scratch:                 add --full-rebuild", flush=True)
+            print("    (a full rebuild is a dedicated job: close other apps; consider "
+                  "ALEX_EMBED_DEVICE=cpu; expect it to run a long time.)", flush=True)
+            sys.exit(2)
 
     # Cross-process lock: refuse to start if another embed (CLI *or* GUI) is
     # already running against this index dir. Two concurrent embeds OOM a 48 GB

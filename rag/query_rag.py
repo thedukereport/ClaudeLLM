@@ -24,7 +24,7 @@ DEFAULT_NPROBE = 128
 class RAGQuerier:
     """Query semantic search index."""
 
-    def __init__(self, index_dir: str = ".", model_name: str = "all-MiniLM-L6-v2"):
+    def __init__(self, index_dir: str = ".", model_name: str = "intfloat/multilingual-e5-small"):
         """Load index and metadata."""
         index_dir = Path(index_dir)
 
@@ -263,7 +263,8 @@ def main():
     parser.add_argument("--queries-file", help="JSON file with list of queries")
     parser.add_argument("--output", help="Output file for batch results")
     parser.add_argument("--k", type=int, default=5, help="Number of results to return")
-    parser.add_argument("--model", default="all-MiniLM-L6-v2", help="SentenceTransformer model")
+    parser.add_argument("--model", default="intfloat/multilingual-e5-small",
+                        help="SentenceTransformer model (fallback only; embedding_model.json beside the index wins when present)")
 
     args = parser.parse_args()
 
