@@ -48,7 +48,7 @@ You don't have to do anything about this — it's already handled. Just **don't 
 
 ---
 
-## What's current (updated 2026-08-08)
+## What's current (updated 2026-09-28)
 
 A running snapshot of how the live system behaves today. The step-by-step parts below still apply; this section captures the hardening added since the first build so the guide matches what's actually on the machine.
 
@@ -60,13 +60,15 @@ A running snapshot of how the live system behaves today. The step-by-step parts 
 
 **Incremental updates work and are the normal way to grow the library.** "Update Index" re-embeds only added/changed books, drops removed ones, and rebuilds keeping your tuned `nlist`/`nprobe`/metric. It relies on two small files every full build now writes — `alexandria_manifest.json` (per-file signature) and `alexandria_embeddings.npy` — so run at least one full build with the current code before relying on incremental.
 
-**Current index:** IVFFlat, cosine (inner product on normalized vectors), `nlist 1024`, `nprobe 128`, model `intfloat/multilingual-e5-small` (384-dim), 1,994,790 chunks across 5,853 books, 3.08 GB.
+**A full rebuild is now opt-in — it can't happen by accident.** On 2026-09-27 a plain `index_books.py` run (no `--incremental`) re-embedded the whole ~2.2M-vector corpus from scratch, drove the Mac 47 GB into swap, and the OS began suspending processes. The root cause was not a model mismatch — the model was read correctly from the sidecar — it was simply a full re-embed, which is unbounded at this corpus size. So a non-incremental run against an **existing** index now **refuses and exits** (before taking the lock, embedding nothing) unless you pass `--full-rebuild`, printing the vector count and pointing you at `--incremental`. Normal growth is `--incremental`; a from-scratch rebuild is a deliberate, dedicated job (`--full-rebuild`, other apps closed, consider `ALEX_EMBED_DEVICE=cpu`, expect it to run long). A first-ever build (no index yet) is unaffected. Always preview with `--incremental --dry-run` first; it embeds nothing and reports exactly what would change.
+
+**Current index:** IVFFlat, cosine (inner product on normalized vectors), `nlist 1024`, `nprobe 128`, model `intfloat/multilingual-e5-small` (384-dim), 2,258,028 chunks across 7,792 books, 3.49 GB.
 
 **The model changed, and the reason matters.** `all-MiniLM-L6-v2` is English-only. On a library holding Greek, Latin, Hebrew and German it scored a Greek passage against its own English translation at 0.116 — below any usable threshold, so those books were not ranked low, they were unreachable. `multilingual-e5-small` scores the same pair at 0.91. Both are 384-dimensional, which is the trap: point the wrong one at an index built by the other and nothing errors, the dimensions line up, and every result is quiet nonsense. That is why the index now writes an `embedding_model.json` sidecar naming the model, its prefixes and its chunk size, and why `query_rag.py` reads that file and **overrides** whatever model name it was handed. e5 also requires prefixes — `passage: ` at index time, `query: ` at search time — and omitting them costs real accuracy while erroring not at all.
 
 **The model changed, and the reason matters.** `all-MiniLM-L6-v2` is English-only. On a library holding Greek, Latin, Hebrew and German it scored a Greek passage against its own English translation at 0.116 — below any usable threshold, so those books were not ranked low, they were unreachable. `multilingual-e5-small` scores the same pair at 0.91. Both are 384-dimensional, which is the trap: point the wrong one at an index built by the other and nothing errors, the dimensions line up, and every result is quiet nonsense. That is why the index now writes an `embedding_model.json` sidecar naming the model, its prefixes and its chunk size, and why `query_rag.py` reads that file and **overrides** whatever model name it was handed. e5 also requires prefixes — `passage: ` at index time, `query: ` at search time — and omitting them costs real accuracy while erroring not at all.
 
-**Local MCP servers** (twelve of them, letting Claude query the corpora directly, managed by Claude Desktop / Cowork over stdio): Alexandria RAG, Greek, Latin (with the Lewis & Short dictionary), Perseus, WikiSpooks, Pleiades, Wikipedia (offline Kiwix), Scriptures (Qur'an / Enoch / Tanakh / Talmud / Mishnah / Ethiopian Tewahedo canon), Project Gutenberg, Papyri (Duke Databank, ~67.6k documentary papyri), Astrology (offline natal/synastry/sky via kerykeion), and WordNet (Open English WordNet — definitions, synonyms, hypernym/hyponym hierarchy). Setup and config live in *"Set Up the MCP Servers with Claude Cowork."* After a rebuild, restart the Alexandria MCP server (or Claude Desktop) so it loads the fresh index instead of the one it holds in memory.
+**Local MCP servers** (fourteen of them, letting Claude query the corpora directly, managed by Claude Desktop / Cowork over stdio): Alexandria RAG, Greek, Latin (with the Lewis & Short dictionary), Perseus, WikiSpooks, Pleiades, Wikipedia (offline Kiwix), Scriptures (Qur'an / Enoch / Tanakh / Talmud / Mishnah / Ethiopian Tewahedo canon), Project Gutenberg, Papyri (Duke Databank, ~67.6k documentary papyri), Astrology (offline natal/synastry/sky via kerykeion), WordNet (Open English WordNet — definitions, synonyms, hypernym/hyponym hierarchy), Chronography (Eusebius & George Syncellus — ancient synchronism, public domain), and Cuneiform Chronicles (~11.8k CDLI royal inscriptions & historiographic texts). Setup and config live in *"Set Up the MCP Servers with Claude Cowork."* After a rebuild, restart the Alexandria MCP server (or Claude Desktop) so it loads the fresh index instead of the one it holds in memory.
 
 ---
 
@@ -406,6 +408,10 @@ re-extracts from scratch.
 
 **I typed a question and got `zsh: no matches found`.** You typed it into the Terminal by mistake. Questions for Claude go in the Cowork chat window; only commands go in the Terminal.
 
+**`REFUSING: an index already exists … this is a FULL rebuild`.** Working as designed — the guardrail added 2026-09-27. You ran `index_books.py` without `--incremental` against an index that already exists, which would re-embed every vector from scratch (the run that OOM'd the Mac). To *update* the library, add `--incremental`. To genuinely rebuild from scratch on purpose, add `--full-rebuild` and treat it as a dedicated job (close other apps; consider `ALEX_EMBED_DEVICE=cpu`; it runs a long time). It refuses before taking the lock, so nothing was started.
+
+**The Terminal looks frozen mid-run (stuck at "Using device: mps:0" with no completion).** Under heavy memory pressure the Terminal itself can stop repainting while the Python process keeps working. Don't assume it hung — check the ground truth: `cat "$INDEX/.indexing.lock"` (a live run holds it; absent means it finished or isn't running) and the timestamps on `alexandria.index` / `alexandria_metadata.json` (if they're recent, it completed). The screen catches up or a new Terminal tab shows a clean prompt. Verify by the lock and file times, never by the frozen display.
+
 ---
 
 ## Why it's built the way it is (design notes)
@@ -450,6 +456,8 @@ This whole system was built and refined *with* Claude Cowork, and your friend ca
 ## Appendix B — Full source code
 
 *Every file below is reproduced exactly. Create each one in your `RAG_system` folder (put the `templates/…` files in a `templates` subfolder and the `static/…` files in a `static` subfolder). Or hand this whole section to Claude Cowork and ask it to create the files for you.*
+
+> **Snapshot note.** This appendix is a point-in-time copy for readers who want everything in one place. The **authoritative, current** source lives in this repo under `rag/`. Model-name defaults here have been kept in step with the live code, but a few later hardening changes (notably the 2026-09-27 `--full-rebuild` guard in `index_books.py`, described under *What's current*) may not be re-pasted line-for-line below; use the files in `rag/` for the exact running code.
 
 <!-- SOURCE-APPENDIX -->
 
@@ -1150,7 +1158,7 @@ DEFAULT_NPROBE = 128
 class RAGQuerier:
     """Query semantic search index."""
 
-    def __init__(self, index_dir: str = ".", model_name: str = "all-MiniLM-L6-v2"):
+    def __init__(self, index_dir: str = ".", model_name: str = "intfloat/multilingual-e5-small"):
         """Load index and metadata."""
         index_dir = Path(index_dir)
 
@@ -1389,7 +1397,7 @@ def main():
     parser.add_argument("--queries-file", help="JSON file with list of queries")
     parser.add_argument("--output", help="Output file for batch results")
     parser.add_argument("--k", type=int, default=5, help="Number of results to return")
-    parser.add_argument("--model", default="all-MiniLM-L6-v2", help="SentenceTransformer model")
+    parser.add_argument("--model", default="intfloat/multilingual-e5-small", help="SentenceTransformer model (fallback only; embedding_model.json beside the index wins when present)")
 
     args = parser.parse_args()
 
@@ -1641,7 +1649,7 @@ def chunk_params_for(model) -> tuple:
         return w, max(1, int(w * 0.2))
     return CHUNK_SIZE, CHUNK_OVERLAP
 CHUNK_OVERLAP = 40  # words of overlap between chunks
-MODEL_NAME = "all-MiniLM-L6-v2"  # Fast, effective, 384-dim embeddings
+MODEL_NAME = "intfloat/multilingual-e5-small"  # 384-dim; fallback only — resolve_model() reads embedding_model.json beside the index when present
 BATCH_SIZE = 128  # Batch size for embedding generation
 DUPLICATE_SIMILARITY_THRESHOLD = 0.95  # Threshold for flagging duplicates
 
