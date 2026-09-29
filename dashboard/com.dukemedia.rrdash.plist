@@ -14,16 +14,23 @@
     <key>WorkingDirectory</key>
     <string>/Users/peterduke/Documents/Reframing Reality Vault</string>
 
-    <!-- Force the arm64 slice. /usr/bin/python3 is universal2; when this agent
-         (or the app it launches) ends up running the Intel slice under Rosetta,
-         every child it spawns — the `servers` wrapper, rag_env/bin/python — also
-         runs x86 and then cannot load the arm64 torch/faiss wheels (rag-ui
-         crash-looped on exactly this). `arch -arm64` pins the native slice. -->
+    <!-- Use an arm64-ONLY interpreter so this can NEVER run under Rosetta.
+         /usr/bin/python3 and the python.org framework build are universal
+         (x86_64 + arm64): launched by a Rosetta parent — or by a stale older
+         plist — they run the Intel slice and macOS raises "Support Ending for
+         Intel-based Apps," and every child (servers wrapper, rag_env python)
+         inherits x86 and then can't load arm64 torch/faiss (rag-ui crash-looped
+         on exactly this, and a stale x86 dashboard triggered the nag again
+         2026-09-29). /opt/homebrew/bin/python3 has only an arm64 slice (verified
+         `lipo -archs`), so the Intel path is impossible. `arch -arm64` is kept as
+         belt-and-suspenders. The dashboard is stdlib + the local `rulings`
+         module, so any python3 runs it. If Homebrew's python moves, repoint this
+         one line. -->
     <key>ProgramArguments</key>
     <array>
         <string>/usr/bin/arch</string>
         <string>-arm64</string>
-        <string>/usr/bin/python3</string>
+        <string>/opt/homebrew/bin/python3</string>
         <string>dashboard.py</string>
     </array>
 

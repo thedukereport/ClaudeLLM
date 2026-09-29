@@ -15,10 +15,15 @@ if [ ! -f "$VAULT/dashboard.py" ]; then
     exit 1
 fi
 
-if ! command -v python3 >/dev/null 2>&1; then
-    echo "Error: python3 not found on PATH."
-    echo "Install Python 3 from python.org or via Homebrew (brew install python)."
-    exit 1
+PYBIN="/opt/homebrew/bin/python3"   # arm64-only — never runs under Rosetta
+if [ ! -x "$PYBIN" ]; then
+    if command -v python3 >/dev/null 2>&1; then
+        PYBIN="$(command -v python3)"   # fallback; may be universal
+    else
+        echo "Error: python3 not found (looked for $PYBIN, then PATH)."
+        echo "Install via Homebrew (brew install python) or python.org."
+        exit 1
+    fi
 fi
 
 echo "Reframing Reality — manuscript dashboard"
@@ -32,7 +37,7 @@ echo
 ( sleep 1.5 && open "$URL" ) &
 
 cd "$VAULT"
-# Pin the native arm64 slice (see the plist comment): a universal2 python3 can
-# otherwise run x86 under Rosetta and hand that architecture down to rag-ui,
-# whose arm64 torch/faiss wheels then fail to load.
-exec arch -arm64 python3 dashboard.py
+# Prefer the arm64-only interpreter so this can never run under Rosetta (a stale
+# x86 dashboard triggered the "Intel-based Apps" nag on 2026-09-29). arch -arm64
+# is kept as belt-and-suspenders even though $PYBIN normally has no Intel slice.
+exec arch -arm64 "$PYBIN" dashboard.py
