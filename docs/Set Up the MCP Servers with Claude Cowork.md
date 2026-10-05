@@ -36,6 +36,7 @@ its data.
 | `papyri` | Search/quote ~67,600 documentary papyri (Duke Databank / DDbDP) — letters, contracts, petitions in Greek & Latin, by papyri.info id or Trismegistos (TM) number | ~100 MB | **Yes** — EpiDoc XML from papyri.info |
 | `astrology` | Offline natal charts, current/dated sky, and synastry (relationship) comparison — Swiss Ephemeris via **kerykeion** | tiny (code only) | **Yes** — pip install; the one server with a non-stdlib dependency |
 | `wordnet` | Define English words: senses, synonyms, antonyms, the broader/narrower (hypernym/hyponym) hierarchy, gloss search — Open English WordNet | ~80 MB | **Yes** — one script, stdlib only |
+| `wiktionary` | Define words from **hundreds of languages** via the English edition of Wiktionary — senses, etymology, IPA, translations, descendants, lexical relations, gloss search | ~several GB | **Yes** — one script, stdlib only (2.8 GB download) |
 | `alexandria-rag` | Semantic search over *your own* PDF library | varies | Only with your own PDFs |
 
 Plus two things that aren't servers:
@@ -393,6 +394,33 @@ These are last because they depend on corpora rather than a single download.
   `wordnet.sqlite` (~80 MB, 107k synsets) in a couple of minutes — stdlib only,
   so it runs under the shared `mcp_env`. Licensed **CC BY 4.0**.
 
+- **`wiktionary`** is Wiktionary as structured data — the English edition, which
+  defines words from **hundreds of languages** (Sumerian, Akkadian, Hebrew,
+  Ancient Greek, Latin, English…) with English glosses. Tools: `define` (senses
+  with part of speech, tags, examples), `etymology`, `pronunciation` (IPA),
+  `translations`, `descendants` (later-language offspring, e.g. Latin *libertas*
+  → the Romance words), `relations` (derived / related / synonyms / antonyms /
+  hypernyms / …), `languages` (which languages have a given headword), and
+  `search_glosses`. Every tool takes an optional `lang` (a name like `Latin` or a
+  code like `la`, `grc`, `he`, `sux`), because one headword spans many languages.
+  Copy `wiktionary_mcp_server.py` and `build_wiktionary.py` into
+  `/Volumes/DRIVE/Wiktionary/`, then:
+
+  ```
+  cd "/Volumes/DRIVE/Wiktionary"
+  python3 build_wiktionary.py
+  ```
+
+  It downloads the kaikki.org / **wiktextract** extract
+  (`raw-wiktextract-data.jsonl.gz`, ~2.8 GB; the download resumes if
+  interrupted) and streams it straight into `wiktionary.sqlite` (several GB) —
+  it never unpacks the 24 GB raw file to disk. Stdlib only, so it runs under the
+  shared `mcp_env`. It is a frozen snapshot of Wiktionary; re-run the build to
+  refresh. Wiktionary content is **CC BY-SA 4.0**; cite wiktextract (Tatu Ylönen,
+  LREC 2022). Complements `greek-resources`/`latin-resources` (LSJ, Lewis &
+  Short) with cross-linguistic etymology and descendant chains rather than
+  replacing them.
+
 - **`perseus`** is the whole Perseus Digital Library in one server. Download the
   two canonical repositories as tarballs (`canonical-greekLit` and
   `canonical-latinLit` from the PerseusDL GitHub), extract them next to
@@ -522,6 +550,10 @@ file (things like `preferences`) exactly as they are.
     "wordnet": {
       "command": "/Volumes/DRIVE/mcp_env/bin/python",
       "args": ["/Volumes/DRIVE/WordNet/wordnet_mcp_server.py"]
+    },
+    "wiktionary": {
+      "command": "/Volumes/DRIVE/mcp_env/bin/python",
+      "args": ["/Volumes/DRIVE/Wiktionary/wiktionary_mcp_server.py"]
     },
     "chronography": {
       "command": "/Volumes/DRIVE/mcp_env/bin/python",

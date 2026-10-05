@@ -104,6 +104,7 @@ Each server folder has its own builder. Recommended order: prove the setup with 
 | `atlas` | `python build_atlas.py` (after pleiades) | small | needs `duckdb` |
 | `astrology` | `bash setup_astro_env.sh` (builds its own env + installs kerykeion) | tiny | the ONLY server needing a pip package; its config entry uses `astro_env/bin/python`, not the shared `mcp_env`. Birth data = lat/lng/IANA tz |
 | `wordnet` | `python build_wordnet.py` | ~80 MB | Open English WordNet (CC BY); stdlib; define/synonyms/antonyms/hypernym-hyponym/gloss-search |
+| `wiktionary` | `python build_wiktionary.py` | ~several GB (2.8 GB download) | English edition of Wiktionary, **hundreds of languages** (CC BY-SA, via kaikki/wiktextract); stdlib; define/etymology/pronunciation/translations/descendants/relations/gloss-search, optional `lang`. Download resumable; streamed into SQLite |
 
 Copy each server's `.py` files into a working folder on the drive first (the repo keeps them under `servers/<name>/`). The detailed, click-by-click instructions with expected output are in **`docs/Set Up the MCP Servers with Claude Cowork.md`** — follow it for any server the user picks.
 

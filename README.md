@@ -7,7 +7,7 @@ Being precise about that last part, because it is a privacy claim and privacy cl
 It's two things working together:
 
 1. **A local RAG** — semantic search over *your own* PDF/EPUB library (meaning-based, not keyword), with a web dashboard to add books, health-check them, and tune the search.
-2. **Fourteen MCP servers** — full-text-searchable corpora, held locally and usable without an internet connection once built, that Claude Desktop / Cowork can query as tools: scriptures, classical Greek & Latin, papyri, ancient places, ancient chronography (Eusebius & Syncellus) and cuneiform royal inscriptions, all of Wikipedia, Project Gutenberg — plus an English dictionary/thesaurus (WordNet) and an offline astrology calculator.
+2. **Fifteen MCP servers** — full-text-searchable corpora, held locally and usable without an internet connection once built, that Claude Desktop / Cowork can query as tools: scriptures, classical Greek & Latin, papyri, ancient places, ancient chronography (Eusebius & Syncellus) and cuneiform royal inscriptions, all of Wikipedia, Project Gutenberg — plus an English dictionary/thesaurus (WordNet), Wiktionary across hundreds of languages, and an offline astrology calculator.
 
 ## The easy way: let Claude build it for you
 
@@ -25,7 +25,7 @@ ocr/                 ← give scanned books a text layer (writes copies, never o
 servers/             ← the MCP servers, each with its build script
   scriptures/  latin/  greek/  perseus/  papyri/
   pleiades/    wikipedia/  wikispooks/  gutenberg/  atlas/  astrology/  wordnet/
-  chronography/  cuneiform/
+  chronography/  cuneiform/  wiktionary/
 dashboard/           ← optional macOS control panel (author's example)
 ```
 
@@ -51,6 +51,7 @@ Four tools: `search_books` (semantic search over your library), `index_info` (wh
 | `atlas` | Geo-temporal place database (DuckDB) | CC BY (from Pleiades) |
 | `astrology` | Offline natal charts, current/dated sky, synastry (Swiss Ephemeris via kerykeion) | MIT code; ephemeris bundled |
 | `wordnet` | English definitions, synonyms, antonyms, hypernym/hyponym hierarchy, gloss search | CC BY 4.0 (Open English WordNet) |
+| `wiktionary` | Wiktionary (English edition) across **hundreds of languages** — definitions, etymology, IPA, translations, descendants, lexical relations, gloss search | CC BY-SA 4.0 (Wiktionary / wiktextract) |
 | `chronography` | Ancient synchronism: Eusebius's *Chronicle* (Jerome's Latin + Karst's German of the Armenian) & George Syncellus (Manetho/Berossus/Africanus fragments) | Public domain |
 | `cuneiform-chronicles` | ~11,800 cuneiform royal inscriptions & historiographic texts (Neo-Assyrian annals, Neo-Babylonian, Achaemenid + earlier) from CDLI | CDLI: free re-use of text w/ attribution |
 
