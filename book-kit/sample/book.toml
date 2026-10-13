@@ -1,0 +1,12 @@
+# The sample book's settings. Its library is the folder library/ inside this vault.
+[book]
+title = "Two Arguments About Government (sample)"
+author = "the author"
+author_actor = "author"
+
+[library]
+roots = ["library"]
+checked_shelf = "PDF"
+
+[workflow]
+out_of_workflow = []

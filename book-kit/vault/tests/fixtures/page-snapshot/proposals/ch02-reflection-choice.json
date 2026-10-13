@@ -1,0 +1,44 @@
+{
+ "title": "Ch 02 · Hamilton wrote \"reflection and choice\"",
+ "chapter": "Ch 02",
+ "where": "Ch02/L5 (block 3204ff); Ch02/L8 [^fed1_test] (block 244556)",
+ "status": "yours",
+ "job": "The paragraph quotes Hamilton's statement of the question the ratification debate puts to the people.",
+ "before": "Alexander Hamilton addressed the first *Federalist* paper \"To the People of the State of New York,\" and the Project Gutenberg text heads it \"For the Independent Journal.\"[^fed1_heading]",
+ "current": [
+  {
+   "where": "Ch02/L5 (block 3204ff)",
+   "text": "Hamilton framed the ratification debate as a test: whether \"societies of men are really capable or not of establishing good government from reflection and design, or whether they are forever destined to depend for their political constitutions on accident and force.\"[^fed1_test]"
+  },
+  {
+   "where": "Ch02/L8 [^fed1_test] (block 244556)",
+   "text": "[^fed1_test]: Hamilton, *Federalist* No. 1. This shows that the founders saw the Constitution as a philosophical experiment in human nature."
+  }
+ ],
+ "proposedPara": "Hamilton framed the ratification debate as a test: whether \"societies of men are really capable or not of establishing good government from reflection and choice, or whether they are forever destined to depend for their political constitutions on accident and force.\"[^fed1_test]\n\n⁂\n\n[^fed1_test]: Hamilton, *Federalist* No. 1, \"General Introduction.\"",
+ "segLabels": [
+  "The paragraph",
+  "Its footnote"
+ ],
+ "proposedNote": "",
+ "reviewedNote": "",
+ "noteless": true,
+ "review": "Federalist No. 1 reads \"from reflection and choice\" in the library's Project Gutenberg text. The note keeps its citation and drops the sentence of interpretation.",
+ "reviewedAt": "2026-10-13T14:00:00Z",
+ "reviewedPara": "Hamilton framed the ratification debate as a test: whether \"societies of men are really capable or not of establishing good government from reflection and choice, or whether they are forever destined to depend for their political constitutions on accident and force.\"[^fed1_test]\n\n⁂\n\n[^fed1_test]: Hamilton, *Federalist* No. 1, \"General Introduction.\"",
+ "noteCheck": {
+  "ok": true,
+  "at": "2026-10-13T14:30:00Z",
+  "text": "Hamilton framed the ratification debate as a test: whether \"societies of men are really capable or not of establishing good government from reflection and choice, or whether they are forever destined to depend for their political constitutions on accident and force.\"[^fed1_test]\n\n⁂\n\n[^fed1_test]: Hamilton, *Federalist* No. 1, \"General Introduction.\"",
+  "tool": "tools/check-card-notes.py",
+  "findings": []
+ },
+ "closedCheck": {
+  "ok": true,
+  "at": "2026-10-13T14:30:00Z",
+  "text": "Hamilton framed the ratification debate as a test: whether \"societies of men are really capable or not of establishing good government from reflection and choice, or whether they are forever destined to depend for their political constitutions on accident and force.\"[^fed1_test]\n\n⁂\n\n[^fed1_test]: Hamilton, *Federalist* No. 1, \"General Introduction.\"",
+  "tool": "tools/check-card-closed.py",
+  "reopenedBy": "",
+  "findings": []
+ }
+}

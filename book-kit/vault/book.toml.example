@@ -1,0 +1,50 @@
+# book.toml — the settings every tool reads. Copy this file to book.toml and fill it in.
+# Paths in [paths] are relative to this vault folder. Paths in [library] and [output]
+# are full paths on your computer; "~" means your home folder.
+
+[book]
+title = "My Book"
+author = "the author"          # how the tools name you in their messages
+author_actor = "author"        # the actor name your rulings carry in the event log
+chapter_glob = "Chapter [0-9][0-9]*.md"
+chapter_number_regex = "^Chapter\\s+0*(\\d+)"
+ledger_glob = "Ch. {nn} — *.md"
+
+[paths]
+chapters = "Chapters"
+appendices = "Appendices"
+fact_check = "Fact Check"
+claims = "Fact Check/Claims"
+events = "Fact Check/events"
+handoffs = "Handoffs"
+methodology = "Methodology"
+page_snapshot = "Handoffs/editor-tools/page-snapshot"
+card_reads = "Handoffs/editor-tools/cards"
+punch_list = "Punch List.md"
+project_state = "Project State.md"
+chapter_map = "Book Structure.md"     # the outline the chapter pipeline keeps in step
+glossary = "Methodology/Glossary Terms.md"
+working_drafts = "Working Drafts"   # preflight.sh prints this folder's drafts for a chapter
+
+[library]
+# The folders that hold the books you cite (PDF, EPUB, TXT). The first one that
+# exists on this machine is used; list the cloud-session path second if you have one.
+roots = ["~/Library-of-Sources"]
+checked_shelf = "PDF"          # a subfolder you have checked by hand; tools read it first
+index_file = "Library Index.json"
+# Optional: a command find-source.sh runs as its semantic search, with {query} and {k}.
+# With the ClaudeLLM RAG from this repository, for example:
+# semantic_search = "python3 ~/ClaudeLLM/rag/query_rag.py --k {k} \"{query}\""
+semantic_search = ""
+
+[page]
+# Your Source Rulings page (a claude.ai artifact). Filled in after you publish it.
+url = ""
+
+[workflow]
+# Chapters no tool, card or check may touch until you say so.
+out_of_workflow = []
+
+[output]
+pdf_dir = ""                   # where publish-pdfs.sh writes chapter PDFs
+snapshot_dir = ""              # where snapshot-vault.sh copies the whole vault

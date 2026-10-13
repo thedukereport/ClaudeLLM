@@ -1,0 +1,34 @@
+{
+ "title": "Ch 01 · Paine's two words: the closing sentence",
+ "chapter": "Ch 01",
+ "where": "Ch01/L5",
+ "status": "yours",
+ "job": "The paragraph shows Paine separating society from government.",
+ "before": "Thomas Paine's pamphlet *Common Sense* reached its readers in 1776, and the edition printed by W. and T. Bradford in Philadelphia is dated February 14, 1776.[^paine_edition]",
+ "after": "He gave each word its own origin: \"Society is produced by our wants, and government by our wickedness.\"[^paine_wants]",
+ "current": [
+  {
+   "where": "Ch01/L5",
+   "text": "Paine opened his argument by pulling apart two words his readers used as one: \"Society in every state is a blessing, but government even in its best state is but a necessary evil; in its worst state an intolerable one.\"[^paine_society] The sentence carries the whole pamphlet's frame."
+  }
+ ],
+ "proposedPara": "Paine opened his argument by pulling apart two words his readers used as one: \"Society in every state is a blessing, but government even in its best state is but a necessary evil; in its worst state an intolerable one.\"[^paine_society] Paine built the rest of the pamphlet on that distinction.",
+ "proposedNote": "",
+ "reviewedNote": "",
+ "noteless": true,
+ "reviewedAt": "2026-10-13T13:00:00Z",
+ "reviewedPara": "Paine opened his argument by pulling apart two words his readers used as one: \"Society in every state is a blessing, but government even in its best state is but a necessary evil; in its worst state an intolerable one.\"[^paine_society] Paine built the rest of the pamphlet on that distinction.",
+ "closedCheck": {
+  "ok": false,
+  "at": "2026-10-13T14:30:00Z",
+  "text": "Paine opened his argument by pulling apart two words his readers used as one: \"Society in every state is a blessing, but government even in its best state is but a necessary evil; in its worst state an intolerable one.\"[^paine_society] Paine built the rest of the pamphlet on that distinction.",
+  "tool": "tools/check-card-closed.py",
+  "reopenedBy": "",
+  "findings": [
+   {
+    "where": "Ch01/L5",
+    "why": "you approved the card \"Ch 01 · Paine's two words: cite the section\" and it is in the book"
+   }
+  ]
+ }
+}

@@ -15,6 +15,12 @@ You don't need to follow the guides by hand. **Open Claude Cowork (or Claude Des
 
 > New to this? That's the intended audience. Drop in `BOOTSTRAP.md` and answer Claude's questions.
 
+## New: the book kit — fact-checking and editing a nonfiction book with Claude
+
+[`book-kit/`](./book-kit/) is a working system for writing a nonfiction book with Claude: six roles in separate chats (Author, Fact-checker, Editor, Production, Managing Editor, Systems), a review page where the author approves every change to the text, a fact-check record where every source read is logged, language and footnote checks, chapter locks, and backups. It searches your own library, so it works best alongside the RAG above, and runs without it.
+
+Start with [`book-kit/README.md`](./book-kit/README.md). To have Claude set it up with you, give it [`book-kit/BOOTSTRAP-BOOK.md`](./book-kit/BOOTSTRAP-BOOK.md). A two-chapter sample book with four planted faults, and the guides that walk through it, are in [`book-kit/sample/`](./book-kit/sample/) and [`book-kit/how-to/`](./book-kit/how-to/).
+
 ## What's in here (code only — no data)
 
 ```
@@ -27,6 +33,7 @@ servers/             ← the MCP servers, each with its build script
   pleiades/    wikipedia/  wikispooks/  gutenberg/  atlas/  astrology/  wordnet/
   chronography/  cuneiform/  wiktionary/
 dashboard/           ← optional macOS control panel (author's example)
+book-kit/            ← the book kit: roles, rules, checks, review page, sample book, guides
 ```
 
 **No texts are included.** Every `build_*.py` / `download_*.py` fetches its corpus from the original source, on *your* machine, at build time. This keeps the repo small and keeps each corpus under its own license.

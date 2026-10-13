@@ -1,0 +1,726 @@
+<title>Source Rulings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one card per passage in the book. The passage shows once; every source behind it is a row inside the card with its own four buttons. */
+:root{
+  --bg:#f3f4f2; --surface:#ffffff; --ink:#1d2326; --muted:#5d676b; --rule:#d6dbd9;
+  --accent:#2f5d62; --accent-soft:#e2ecec;
+  --keep:#2e6b3f; --cut:#9a3324; --warn-soft:#f6eedb; --warn:#7a5a12;
+  --later:#7a5a12; --later-soft:#f4ead2; --new:#3b4f8f; --new-soft:#e3e8f6; --prop:#5d676b; --prop-soft:#e7eae9;
+  --display:"Newsreader", Georgia, "Times New Roman", serif;
+  --body:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#141819; --surface:#1c2123; --ink:#e4e8e6; --muted:#9aa5a8; --rule:#323a3d;
+  --accent:#8cc1c4; --accent-soft:#22393b;
+  --keep:#8fd19f; --cut:#f0a193; --warn-soft:#352c17; --warn:#e2c06f;
+  --later:#e2c06f; --later-soft:#382f18; --new:#a9b8ef; --new-soft:#252c45; --prop:#b3bcbf; --prop-soft:#2a3133;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141819; --surface:#1c2123; --ink:#e4e8e6; --muted:#9aa5a8; --rule:#323a3d;
+  --accent:#8cc1c4; --accent-soft:#22393b;
+  --keep:#8fd19f; --cut:#f0a193; --warn-soft:#352c17; --warn:#e2c06f;
+  --later:#e2c06f; --later-soft:#382f18; --new:#a9b8ef; --new-soft:#252c45; --prop:#b3bcbf; --prop-soft:#2a3133;
+  color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--body);padding-inline:16px;padding-block:0 48px}
+.wrap{max-width:860px;margin:0 auto}
+header.top{padding-block:32px 16px;display:grid;gap:10px}
+.eyebrow{font:500 12px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+h1{font:600 clamp(28px,5vw,38px)/1.1 var(--display);margin:0;text-wrap:balance}
+.lede{margin:0;color:var(--muted);max-width:65ch}
+.rubric-sum{cursor:pointer;font:500 13px/1.4 var(--body);color:var(--accent)} .rubric-wrap .rubric{margin-top:8px}
+.rubric{display:grid;gap:6px;background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:14px 16px;font-size:14px;max-width:72ch}
+.rubric b{display:inline-block;min-width:104px;font:600 12px/1.6 var(--mono);text-transform:uppercase;letter-spacing:.05em}
+.r-do{color:var(--keep)} .r-cut{color:var(--cut)} .r-skip{color:var(--muted)}
+.rubric .fine{font-size:13px;color:var(--muted);border-top:1px dashed var(--rule);padding-top:8px}
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--rule);padding-block:12px;display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center}
+.tally{display:flex;gap:14px;flex-wrap:wrap;font:500 13px/1 var(--mono);font-variant-numeric:tabular-nums}
+.tally b{font-weight:600}
+.t-do{color:var(--keep)} .t-cut{color:var(--cut)}
+.filters{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+.filters button{font:500 13px/1 var(--body);padding:7px 11px;border-radius:999px;border:1px solid var(--rule);background:var(--surface);color:var(--ink);cursor:pointer}
+.filters button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+.status{font:13px/1.4 var(--body);color:var(--muted);padding-block:10px 0;min-height:1.4em}
+.status.err{color:var(--cut)}
+main{display:grid;gap:22px;padding-top:18px}
+article.passage{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:18px;display:grid;gap:14px}
+.ptitle{font:600 21px/1.25 var(--display);margin:0;text-wrap:balance}
+.pnum{font:500 12px/1 var(--mono);color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+blockquote.text{margin:0;padding:12px 14px;background:var(--bg);border-radius:6px;font:16px/1.6 var(--display);white-space:pre-wrap;max-height:340px;overflow:auto}
+.where{font:12px/1.4 var(--mono);color:var(--muted);margin-top:-8px}
+.nbl{display:block;font:600 11px/1.4 var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:4px}
+.nbl.hl{color:var(--accent);margin-bottom:-8px}
+.nb .nbt{font:14.5px/1.6 var(--display);color:var(--muted);white-space:pre-wrap;max-height:220px;overflow:auto;padding-left:12px;border-left:2px solid var(--rule)}
+.fn .nbt{font:14px/1.55 var(--body);white-space:pre-wrap;max-height:220px;overflow:auto;padding:8px 12px;background:var(--bg);border-radius:6px}
+.prop{padding:10px 12px;border-radius:6px;background:var(--later-soft)}
+.prop .nbt{font:14.5px/1.6 var(--display);white-space:pre-wrap;max-height:300px;overflow:auto}
+.says{padding:10px 12px;border-radius:6px;background:var(--new-soft)}
+.says .nbt{font:14.5px/1.6 var(--display);white-space:pre-wrap}
+.dep{margin:0;padding:10px 12px;border-radius:6px;background:var(--warn-soft);color:var(--ink);font-size:14px;max-width:72ch}
+.dep b{font:600 11px/1 var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--warn);margin-right:6px}
+.srcs{display:grid;gap:0;border-top:1px solid var(--rule)}
+.src{display:grid;gap:8px;padding-block:14px;border-bottom:1px solid var(--rule);padding-left:12px;border-left:3px solid transparent}
+.src:last-child{border-bottom:0;padding-bottom:0}
+.src.do{border-left-color:var(--keep)} .src.dont,.src.delete{border-left-color:var(--cut)} .src.skip{border-left-color:var(--muted)}
+.shead{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.code{font:600 13px/1 var(--mono);color:var(--muted)}
+.sname{font:600 15px/1.4 var(--body);flex:1 1 280px;min-width:0}
+.chip{font:500 10.5px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:4px 7px;border-radius:4px;white-space:nowrap}
+.chip.later{background:var(--later-soft);color:var(--later)} .chip.new{background:var(--new-soft);color:var(--new)} .chip.prop{background:var(--prop-soft);color:var(--prop)}
+.q{margin:0;font-size:15px;max-width:68ch}
+.yd{margin:0;font-size:13.5px;color:var(--muted);max-width:68ch}
+.yd b{font:600 11px/1 var(--mono);text-transform:uppercase;letter-spacing:.05em;color:var(--accent);margin-right:6px}
+.actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.actions button{font:600 13.5px/1 var(--body);padding:9px 14px;border-radius:6px;border:1px solid var(--rule);background:var(--surface);color:var(--ink);cursor:pointer}
+.actions button.do[aria-pressed="true"]{background:var(--keep);border-color:var(--keep);color:var(--surface)}
+.actions button.dont[aria-pressed="true"],.actions button.delete[aria-pressed="true"]{background:var(--cut);border-color:var(--cut);color:var(--surface)}
+.actions button.skip[aria-pressed="true"]{background:var(--muted);border-color:var(--muted);color:var(--surface)}
+.actions button.clear{font-weight:500;border-color:transparent;background:transparent;color:var(--muted);padding-inline:6px}
+details.more summary{cursor:pointer;font:500 13px/1.4 var(--body);color:var(--accent)}
+dl.meta{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;margin:8px 0 0;font-size:13px}
+dl.meta dt{color:var(--muted);font:500 11.5px/1.6 var(--mono);text-transform:uppercase;letter-spacing:.05em}
+dl.meta dd{margin:0;min-width:0;overflow-wrap:anywhere}
+@media (max-width:520px){dl.meta{grid-template-columns:1fr} dl.meta dt{margin-top:4px}}
+label.cm{display:grid;gap:4px;margin-top:8px;font:500 11.5px/1.3 var(--mono);text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+label.cm textarea{font:14px/1.5 var(--body);text-transform:none;letter-spacing:0;color:var(--ink);background:var(--bg);border:1px solid var(--rule);border-radius:6px;padding:8px 10px;min-height:40px;resize:vertical;width:100%}
+button:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pz{display:grid;gap:12px;border:2px solid var(--accent);border-radius:8px;padding:14px}
+.pz h3{margin:0;font:600 17px/1.3 var(--display)}
+.pz .job{margin:0;font-size:14.5px;max-width:72ch}
+.pz .job b{font:600 11px/1 var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin-right:6px}
+label.ed{display:grid;gap:4px;font:600 11px/1.4 var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--accent)}
+label.ed textarea{font:16px/1.6 var(--display);text-transform:none;letter-spacing:0;color:var(--ink);background:var(--bg);border:1px solid var(--rule);border-radius:6px;padding:10px 12px;resize:vertical;width:100%}
+label.ed textarea.note{font:14px/1.55 var(--body)}
+label.ed textarea.changed{border-color:var(--warn);background:var(--warn-soft)}
+.out{font-size:14px;max-width:72ch} .out ul{margin:4px 0 0;padding-left:20px} .out li{margin-bottom:4px}
+.chk{padding:10px 12px;border-radius:6px;background:var(--new-soft);font-size:14px;white-space:pre-wrap;max-width:76ch}
+.pstate{font:500 13px/1.4 var(--body);color:var(--muted)}
+.pstate.ok{color:var(--keep)}
+.flash{margin:8px 0;padding:8px 10px;border-radius:6px;font:600 13px/1.4 var(--body);border:1px solid var(--keep);color:var(--keep)}
+.flash.bad{border-color:var(--cut);color:var(--cut)}
+.unread{margin:8px 0 0;font:500 13px/1.5 var(--body)}
+.unread:empty{display:none}
+.unread .ulbl{font-weight:600;margin-right:6px}
+.unread button{font:inherit;background:none;border:0;border-bottom:1px dotted currentColor;color:inherit;cursor:pointer;padding:0;margin:0 10px 0 0}
+.pz .actions button.go{background:var(--keep);border-color:var(--keep);color:var(--surface)}
+.pz .actions button.send{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+.pz .actions button[disabled]{opacity:.5;cursor:default}
+.nav{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.nav button{font:600 14px/1 var(--body);padding:10px 16px;border-radius:6px;border:1px solid var(--rule);background:var(--surface);color:var(--ink);cursor:pointer;min-width:120px}
+.nav button[disabled]{opacity:.4;cursor:default}
+.nav .pos{font:500 13px/1.3 var(--mono);color:var(--muted);text-align:center;flex:1}
+.badge{display:inline-block;font:600 11px/1 var(--mono);text-transform:uppercase;letter-spacing:.06em;padding:5px 8px;border-radius:4px;margin-left:8px;vertical-align:middle}
+.badge.wait{background:var(--warn-soft);color:var(--warn)} .badge.done{background:var(--accent-soft);color:var(--accent)}
+.badge.ready{background:var(--keep);color:var(--bg,#fff)} .badge.sent{background:var(--warn-soft);color:var(--warn)}
+.openwork{margin:14px 0 4px;padding:10px 12px;border:1px solid var(--rule);border-radius:8px;font:500 13px/1.6 var(--body)}
+.openwork:empty{display:none}
+.openwork .ow-head{font-weight:700;display:block;margin-bottom:2px}
+.openwork .ow-ch{display:inline-block;margin-right:12px;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.openwork .ow-src{color:var(--muted);display:block;margin-top:4px}
+.tri-lane{margin:22px 0 8px;font:700 18px/1.3 var(--display,inherit)}
+.tri-lede{color:var(--muted);font-size:14px;margin:0 0 10px;max-width:70ch}
+.tri{border:1px solid var(--rule);border-radius:8px;padding:12px 14px;margin:10px 0}
+.tri.agree{border-color:var(--keep)} .tri.no{border-color:var(--cut,#b3261e)}
+.tri-h{font:600 13px/1.4 var(--mono);margin-bottom:6px}
+.tri-t{margin:6px 0;padding:8px 10px;border-left:3px solid var(--rule);font-size:15px;line-height:1.55}
+.tri-t mark{background:color-mix(in srgb,var(--cut,#b3261e) 22%,transparent);text-decoration:line-through;color:inherit}
+.tri-r{font-size:14px;margin:6px 0}
+.tri .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.tri .acts button{font:inherit;font-size:14px;padding:6px 12px;border-radius:6px;border:1px solid var(--rule);background:var(--bg);color:inherit;cursor:pointer}
+.tri .acts button[aria-pressed="true"]{font-weight:700;border-width:2px}
+.tri-all{font:inherit;font-size:14px;padding:6px 12px;border-radius:6px;border:2px solid var(--keep);background:var(--bg);color:var(--keep);cursor:pointer;font-weight:700}
+.readybar{margin:10px 0;padding:10px 12px;border-radius:8px;border:2px solid var(--keep);font:500 14px/1.5 var(--body)}
+.readybar:empty{display:none;border:0;padding:0;margin:0}
+.readybar .rb-head{font-weight:700;color:var(--keep);display:block;margin-bottom:4px}
+.readybar button{font:inherit;background:none;border:0;border-bottom:1px solid currentColor;color:inherit;cursor:pointer;padding:0;margin:2px 14px 2px 0;text-align:left}
+.readybar button.go{font-weight:700;color:var(--keep);border-bottom-width:2px}
+.readybar.pulse{animation:rbp 1.2s ease-out 2}
+@keyframes rbp{0%{box-shadow:0 0 0 0 var(--keep)}100%{box-shadow:0 0 0 10px transparent}}
+@media (prefers-reduced-motion:reduce){.readybar.pulse{animation:none}}
+#filters button .n{font-weight:700;margin-left:4px}
+.empty{padding:40px 0;color:var(--muted);max-width:60ch}
+.ask-q{font:16px/1.6 var(--display);white-space:pre-wrap;margin:0;max-width:72ch}
+.ask-meta{display:grid;gap:8px}
+.ask-sub{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.ask-sub button{font:500 13px/1 var(--body);padding:7px 11px;border-radius:999px;border:1px solid var(--rule);background:var(--surface);color:var(--ink);cursor:pointer}
+.ask-sub button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+.actions button.ok[aria-pressed="true"]{background:var(--keep);border-color:var(--keep);color:var(--surface)}
+.actions button.no[aria-pressed="true"]{background:var(--cut);border-color:var(--cut);color:var(--surface)}
+.bf-title{font:600 16px/1.35 var(--display);margin:0}
+.bf-meta{font:12.5px/1.5 var(--mono);color:var(--muted);overflow-wrap:anywhere}
+.bf-more{font:inherit;font-size:14px;padding:8px 14px;border-radius:6px;border:1px solid var(--rule);background:var(--surface);color:var(--ink);cursor:pointer;margin:6px 0 14px}
+.foot{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid var(--rule);padding-top:14px;max-width:65ch}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow"><span id="book-title">Your book</span> · cards for your ruling</div>
+    <h1>Source Rulings</h1>
+    <p class="lede">One card at a time; Previous and Next, or the arrow keys, move you through. A green box at the top lists what Claude has checked and sent back to you, and the browser tab shows the number. <b>Waiting for you</b> holds what needs your decision. <b>Approved, going in</b> holds what you approved that is not in the chapter yet. <b>In the book</b> holds what is done; every button there still works. <b>Asks</b> holds what Claude needs from you, one card at a time. <b>Back-fill</b> lists the works the book cites with no logged read.</p>
+    <details class="rubric-wrap"><summary class="rubric-sum">What the buttons mean</summary><div class="rubric" role="note" aria-label="How to rule">
+      <div><b class="r-do">Do it</b>Yes to the question as asked.</div>
+      <div><b class="r-cut">Don't do it</b>No. The source comes out and your sentence stays, or the card's change doesn't go in.</div>
+      <div><b class="r-skip">Skip</b>Not now. It stays on the list.</div>
+      <div><b class="r-cut">Delete</b>Take out the source and the passage it supports.</div>
+      <div class="fine">Each Don't do it or Delete comes back to you as a proposal card, with the exact text, for you to approve. Where a passage has a Proposal box, you can edit the proposed paragraph and footnote directly. Claude checks each edit you send against the source and the chapter, and writes the result in the box. Once you approve, the change goes into the chapter by unlock, edit, relock, push.</div>
+    </div>
+  </details>
+  </header>
+
+  <div class="bar" role="region" aria-label="Tally and filters">
+    <div class="tally" id="tally"></div>
+    <div class="filters" id="filters">
+      <button type="button" data-v="ready" aria-pressed="false">Ready for you<span class="n" id="n-ready"></span></button>
+      <button type="button" data-v="sent" aria-pressed="false">With Claude<span class="n" id="n-sent"></span></button>
+      <button type="button" data-v="todo" aria-pressed="true">Waiting for you<span class="n" id="n-todo"></span></button>
+      <button type="button" data-v="approved" aria-pressed="false">Approved, going in<span class="n" id="n-approved"></span></button>
+      <button type="button" data-v="inbook" aria-pressed="false">In the book<span class="n" id="n-inbook"></span></button>
+      <button type="button" data-v="triage" aria-pressed="false">Triage<span class="n" id="n-triage"></span></button>
+      <button type="button" data-v="asks" aria-pressed="false">Asks<span class="n" id="n-asks"></span></button>
+      <button type="button" data-v="backfill" aria-pressed="false">Back-fill<span class="n" id="n-backfill"></span></button>
+      <button type="button" data-v="all" aria-pressed="false">All</button>
+    </div>
+  </div>
+  <div class="status" id="status" role="status">Loading the passages…</div>
+  <div class="openwork" id="openwork" aria-live="polite"></div>
+  <div class="readybar" id="ready" aria-live="polite"></div>
+  <div class="unread" id="unread" aria-live="polite"></div>
+
+  <main id="list">
+    <div class="empty">The passages load here: one card per passage in the book, each listing the sources behind it.</div>
+  </main>
+
+  <p class="foot">Compiled by Claude; not yet reviewed by you. <span id="foot-extra"></span> Proposal cards are written by Claude from the chapter on disk and checked again after each edit you send.</p>
+</div>
+
+<script>
+(function(){
+  // PAGE SETTINGS. The page reads them from the document config/page in its database, which Claude
+  // writes with ArtifactData (see page/README.md). Until that document exists, these defaults apply.
+  //   bookTitle      the name shown above the page title
+  //   outOfWorkflow  chapter numbers no card may reach (book.toml [workflow] out_of_workflow)
+  //   workflowLabel  how the page names the chapters in the workflow, e.g. "Chapters 2–9"
+  //   noteGateFrom   cards Claude checked after this UTC time must have a note check (the note gate);
+  //                  the default holds every card from the start
+  //   footer         a sentence added to the footer, e.g. how the source cards are numbered
+  const PAGE_DEFAULTS={bookTitle:"Your book",outOfWorkflow:[],workflowLabel:"",noteGateFrom:"1970-01-01T00:00:00Z",footer:""};
+  const LABEL={later:"In the chapter now",new:"New card today",prop:"Earlier card"};
+  const state={config:null,rows:[],props:new Map(),view:"todo",key:null,db:null,flash:null,register:null,triage:[],asks:[],askKey:null,askView:"open",backlog:[],bfShow:{notondrive:40,unread:40},presses:[],clIdx:null};
+  try{let v=localStorage.getItem("sr-view"); if(v==="done") v="inbook"; if(v) state.view=v; const k=localStorage.getItem("sr-key"); if(k) state.key=k;}catch(e){}
+  // A link straight to one card: ...#card=<card id> opens that card under "All", whatever view was last used.
+  try{const m=location.hash.match(/^#card=([A-Za-z0-9_\-]+)$/); if(m){state.view="all"; state.key=m[1];}}catch(e){}
+  const $=s=>document.querySelector(s);
+  function cfg(){
+    const c=Object.assign({},PAGE_DEFAULTS,state.config||{});
+    c.outOfWorkflow=(Array.isArray(c.outOfWorkflow)?c.outOfWorkflow:[]).map(Number).filter(n=>!isNaN(n));
+    return c;
+  }
+  function workflowLabel(){
+    const c=cfg(); if(c.workflowLabel) return c.workflowLabel;
+    return c.outOfWorkflow.length?"the chapters in the workflow (not "+c.outOfWorkflow.join(", ")+")":"all chapters";
+  }
+  function applyConfig(){
+    const c=cfg(); $("#book-title").textContent=c.bookTitle||PAGE_DEFAULTS.bookTitle; $("#foot-extra").textContent=c.footer||"";
+  }
+  const statusEl=$("#status"), listEl=$("#list");
+  const setStatus=(t,err)=>{statusEl.textContent=t;statusEl.classList.toggle("err",!!err);};
+  const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+
+  function tally(){
+    const live=state.rows.filter(r=>!coveredBy(r)), n=live.length, c=v=>live.filter(r=>r.ruling===v).length;
+    const d=c("do"),x=c("dont"),s=c("skip"),del=c("delete");
+    $("#tally").innerHTML=`<span><b>${n-d-x-s-del}</b> to rule</span><span class="t-do"><b>${d}</b> do it</span><span class="t-cut"><b>${x}</b> don't</span><span class="t-cut"><b>${del}</b> delete</span><span><b>${s}</b> skipped</span>`;
+  }
+  function show(r){
+    const f=state.filter;
+    if(f==="open") return !r.ruling&&!coveredBy(r);
+    if(f==="cut") return r.ruling==="dont"||r.ruling==="delete";
+    if(f==="skip") return r.ruling==="skip";
+    return true;
+  }
+  function coveredBy(r){ for(const [g,p] of state.props){ if((p.covers||[]).includes(r.id)) return g; } return null; }
+  function srcHTML(r){
+    const meta=[["Card",r.card],["First copy with",r.firstWith],["Last copy without",r.lastWithout],["Notes",r.notes]].filter(x=>x[1]);
+    const btn=(v,t)=>`<button type="button" class="${v}" data-act="${v}" aria-pressed="${r.ruling===v}">${t}</button>`;
+    return `<div class="src ${esc(r.ruling||"")}" data-id="${esc(r.id)}">
+      <div class="shead"><span class="code">${esc(r.code)}</span><span class="sname">${esc(r.source)}</span><span class="chip ${esc(r.kind)}">${esc(LABEL[r.kind]||"")}</span></div>
+      <p class="q">${esc(r.question)}</p>
+      ${r.yourDraft?`<p class="yd"><b>In your draft?</b>${esc(r.yourDraft)}</p>`:""}
+      ${r.sourceSays?`<div class="says"><span class="nbl">What the source says</span><div class="nbt">${esc(r.sourceSays)}</div></div>`:""}
+      <div class="actions">${btn("do","Do it")}${btn("dont","Don't do it")}${btn("skip","Skip")}${btn("delete","Delete")}${r.ruling?'<button type="button" class="clear" data-act="clear">Clear</button>':""}</div>
+      <label class="cm" for="note-${esc(r.id)}">Your note to the Editor on ${esc(r.code)}<textarea id="note-${esc(r.id)}" data-note rows="2" placeholder="Saved when you click outside the box">${esc(r.comment||"")}</textarea></label>
+      <details class="more"><summary>Where it came from</summary>
+        <dl class="meta">${meta.map(([a,b])=>`<dt>${a}</dt><dd>${esc(b)}</dd>`).join("")}</dl>
+      </details>
+    </div>`;
+  }
+  const fmt=t=>t?new Date(t).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}):"";
+  function pzHTML(g){
+    const p=state.props.get(g); if(!p) return "";
+    const ed=(p.proposedPara!==p.reviewedPara)||(p.proposedNote!==p.reviewedNote);
+    let st="", btns="";
+    if(p.status==="applied"){st=`<div class="pstate ok">In the chapter since ${esc(fmt(p.appliedAt))}. ${esc(p.appliedNote||"")}</div>`;
+      btns=`<button type="button" data-pact="reopen">Take a second look: reopen for changes</button>`;}
+    else if(p.status==="approved"){st=`<div class="pstate ok">You approved this ${esc(fmt(p.approvedAt))}. Next: unlock, edit, relock, push. Send any message in the chat and Production applies it with tools/apply-card.py.</div>`;
+      btns=`<button type="button" data-pact="withdraw">Withdraw approval</button>`;}
+    else if(closedHeld(g)){const h=closedHeld(g);
+      st=`<div class="chk"><b>Held: you have already approved this line.</b> This card changes a paragraph or footnote you approved, so it does not come to you. It stays held unless you reopen the line in your own words.${h.findings.map(f=>`\n• ${f.where}: ${f.why}`).join("")}</div>`;
+      btns="";}
+    else if(noteHeld(p)){const h=noteHeld(p);
+      st=`<div class="chk"><b>Held by the note check${h.at?` (${esc(fmt(h.at))})`:""}.</b> ${h.why==="refused"?"Its footnote breaks your note rules, so it does not come to you until the Editor rebuilds it:":"Its footnote has not been through the note check since its text last changed, so it does not come to you yet."}${(h.findings||[]).map(f=>`\n• ${f.where||""} ${f.slug?"[^"+f.slug+"]":""} ${f.pile}: ${f.why}${f.clause?`\n   "${f.clause}"`:""}`).join("")}</div>`;
+      btns="";}
+    else if(p.status==="submitted"&&!checkedAfterSend(p)&&p.proposedPara===p.submittedPara&&p.proposedNote===p.submittedNote){st=`<div class="pstate"><b>Sent for checking ${esc(fmt(p.submittedAt))}. Not approved yet.</b> Claude checks your text at its next reply in the chat. When it has, an <b>Approve for the chapter</b> button appears here, and the card is listed at the top of the page under "Ready for you to approve."</div>`;}
+    else if(ed){st=`<div class="pstate">You've edited this text. Send it to Claude for checking before approving.</div>`;
+      btns=`<button type="button" class="send" data-pact="send">Send my edits for checking</button><button type="button" class="clear" data-pact="undo">Throw away my edits</button>`;}
+    else {st=`<div class="pstate">${checkedAfterSend(p)?`<b>Claude checked the text you sent (${esc(fmt(p.reviewedAt))}). Not approved yet.</b> Press Approve to send it to the chapter, or edit either box.`:"Claude has checked this text. Edit either box, or approve it as it stands."}</div>`;
+      btns=`<button type="button" class="go" data-pact="approve">Approve for the chapter</button>`;}
+    const lock=p.status==="approved"||p.status==="applied"?" readonly":"";
+    return `<section class="pz" data-g="${esc(g)}">
+      <h3>Proposal · ${esc(p.where||"")}</h3>
+      ${p.job?`<p class="job"><b>${esc(p.jobLabel||"The paragraph's job")}</b>${esc(p.job)}</p>`:""}
+      ${p.segLabels?segs(p.proposedPara).map((v,k)=>`<label class="ed">${esc(p.segLabels[k]||("Change "+(k+1)))} · you can edit this<textarea data-pf="proposedPara" data-seg="${k}" rows="${Math.min(14,Math.max(3,Math.ceil(v.length/70)))}" class="${v!==(segs(p.reviewedPara)[k]||"")?"changed":""}"${lock}>${esc(v)}</textarea></label>`).join(""):`<label class="ed">${esc(p.paraLabel||"Proposed paragraph")} · you can edit this<textarea data-pf="proposedPara" rows="14" class="${p.proposedPara!==p.reviewedPara?"changed":""}"${lock}>${esc(p.proposedPara||"")}</textarea></label>`}
+${p.noteless?"":`<label class="ed">${esc(p.noteLabel||"Proposed footnote")} · you can edit this<textarea data-pf="proposedNote" rows="3" class="note ${p.proposedNote!==p.reviewedNote?"changed":""}"${lock}>${esc(p.proposedNote||"")}</textarea></label>`}
+      ${p.removed&&p.removed.length?`<div class="out"><span class="nbl">${esc(p.removedLabel||"Taken out of the footnote, and why")}</span><ul>${p.removed.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`:""}
+      ${state.flash&&state.flash.g===g?`<div class="flash ${state.flash.ok?"":"bad"}" role="status">${esc(state.flash.msg)}</div>`:""}
+      ${p.review?`<div><span class="nbl">Claude's check · ${esc(fmt(p.reviewedAt))}</span><div class="chk">${esc(p.review)}</div></div>`:""}
+      ${st}
+      ${btns?`<div class="actions">${btns}</div>`:""}
+    </section>`;
+  }
+  function cardsAll(){
+    const groups=new Map();
+    state.rows.forEach(r=>{const g=r.group||r.id; if(!groups.has(g))groups.set(g,[]); groups.get(g).push(r);});
+    const out=[];
+    for(const [g,rs] of groups){
+      const vis=rs.filter(r=>!coveredBy(r)); const p=state.props.get(g);
+      const rowsDone=vis.every(r=>r.ruling&&r.ruling!=="skip");
+      const pDone=!p||p.status==="approved"||p.status==="applied";
+      const props=[]; rs.forEach(r=>{ if(!r.proposed||coveredBy(r)) return; const h=props.find(x=>x.t===r.proposed); if(h){ if(!h.cards.includes(r.card)) h.cards.push(r.card); h.codes.push(r.code);} else props.push({t:r.proposed,cards:[r.card],codes:[r.code]}); });
+      const propHTML=props.map(x=>`<div class="prop"><span class="nbl">Proposed on card ${esc(x.cards.join(", "))} · the source${x.codes.length>1?"s":""} below: ${esc(x.codes.join(", "))}</span><div class="nbt">${esc(x.t)}</div></div>`).join("");
+      out.push({key:g,done:rowsDone&&pDone,title:rs[0].gtitle||rs[0].chapter,body:`
+        ${rs[0].before?`<div class="nb"><span class="nbl">The paragraph before</span><div class="nbt">${esc(rs[0].before)}</div></div>`:""}
+        ${rs[0].para?`<div class="nbl hl">The paragraph in the book now · ${esc(rs[0].paraWhere||"")}</div><blockquote class="text">${esc(rs[0].para)}</blockquote>`:""}
+        ${rs[0].paraNote?`<div class="fn"><span class="nbl">Its footnote now</span><div class="nbt">${esc(rs[0].paraNote)}</div></div>`:""}
+        ${(p&&p.current||[]).map(c=>`<div class="nbl hl">Also in the book now · ${esc(c.where)}</div><blockquote class="text">${esc(c.text)}</blockquote>`).join("")}
+        ${rs[0].after?`<div class="nb"><span class="nbl">The paragraph after</span><div class="nbt">${esc(rs[0].after)}</div></div>`:""}
+        ${rs[0].dep&&vis.length>1?`<p class="dep"><b>How these connect</b>${esc(rs[0].dep)}</p>`:""}
+        ${pzHTML(g)}
+        ${propHTML}
+        ${vis.length?`<div class="srcs">${vis.map(srcHTML).join("")}</div>`:""}`});
+    }
+    for(const g of [...state.props.keys()].filter(k=>!groups.has(k)).sort()){
+      const p=state.props.get(g);
+      out.push({key:g,done:p.status==="approved"||p.status==="applied",title:p.title||g,body:`
+        ${p.before?`<div class="nb"><span class="nbl">The paragraph before</span><div class="nbt">${esc(p.before)}</div></div>`:""}
+        ${(p.current||[]).map(c=>`<div class="nbl hl">In the book now · ${esc(c.where)}</div><blockquote class="text">${esc(c.text)}</blockquote>`).join("")}
+        ${p.after?`<div class="nb"><span class="nbl">The paragraph after</span><div class="nbt">${esc(p.after)}</div></div>`:""}
+        ${pzHTML(g)}`});
+    }
+    return out;
+  }
+  function stage(g){
+    const p=state.props.get(g); if(!p) return "";
+    if(p.status==="applied") return "applied";
+    if(p.status==="approved") return "approved";
+    if(closedHeld(g)) return "closed";
+    if(noteHeld(p)) return "held";
+    if(p.status==="submitted"&&!checkedAfterSend(p)) return "sent";
+    if(checkedAfterSend(p)&&p.proposedPara===p.reviewedPara&&p.proposedNote===p.reviewedNote) return "ready";
+    return "";
+  }
+  function visibleCards(){
+    const all=cardsAll();
+    return all.filter(c=>{
+      if(c.key===state.key&&state.flash&&state.flash.g===c.key) return true;
+      if(state.view==="all") return true;
+      if(state.view==="ready") return stage(c.key)==="ready";
+      return inView(c,state.view);
+    });
+  }
+  function inView(c,v){
+    const st=stage(c.key);
+    if(st==="closed") return false;
+    if(v==="ready") return st==="ready";
+    if(v==="sent") return st==="sent"||st==="held";
+    if(v==="approved") return st==="approved";
+    if(v==="inbook") return c.done&&st!=="approved";
+    return !c.done&&st!=="sent"&&st!=="approved"&&st!=="held";
+  }
+  function counts(){
+    const all=cardsAll(), n=v=>all.filter(c=>inView(c,v)).length;
+    [["todo","n-todo"],["approved","n-approved"],["inbook","n-inbook"]].forEach(([v,id])=>{const k=n(v); $("#"+id).textContent=k?`(${k})`:"";});
+  }
+  function openWork(){
+    const r=state.register, el=$("#openwork");
+    if(!r||!r.total){el.innerHTML="";return;}
+    const chs=(r.byChapter||[]).map(x=>`<span class="ow-ch">Ch ${esc(String(x.ch).padStart(2,"0"))} · ${esc(x.open)}</span>`).join("");
+    el.innerHTML=`<span class="ow-head">Open work, ${esc(workflowLabel())}: ${esc(r.total)} items, read against the text ${esc(r.asOf||"")}</span>${chs}<span class="ow-src">${esc(r.note||"")}</span>`;
+  }
+  const SEP="\n\n\u2042\n\n";
+  const segs=t=>String(t||"").split(SEP);
+  function paraVal(box,p){const ss=[...box.querySelectorAll('textarea[data-pf="proposedPara"]')]; if(!ss.length) return p.proposedPara||""; return ss.length>1||p.segLabels?ss.map(x=>x.value).join(SEP):ss[0].value;}
+  function triageHTML(){
+    const T=state.triage; if(!T.length) return '<div class="empty">No triage items.</div>';
+    const lanes=[["cut","Cut: the words shown come out","Each item names words to remove. Struck-through words are what comes out; where the item names a whole note or sentence, the instruction says so."],["ship","Ships as is","The book keeps these sentences as they are, and the register item closes."],["drop","Drop","No change to the book; the item asked for something the book does not need, for the reason given."]];
+    const hl=t=>{const x=esc(t.text); if(t.lane!=="cut"||!t.cutFound) return x; const c=esc(t.cut.trim()); const i=x.indexOf(c); return i<0?x:x.slice(0,i)+"<mark>"+c+"</mark>"+x.slice(i+c.length);};
+    return `<p class="tri-lede">${T.length} items from the triage list, read in their chapters. Agree or No on each; "Agree to the rest" marks every item in that lane you have not marked. Nothing changes in the book until the daily batch, and only for items you agreed to.</p>`+lanes.map(([k,title,lede])=>{
+      const items=T.filter(t=>t.lane===k), left=items.filter(t=>!t.ruling).length;
+      return `<h2 class="tri-lane">${title} (${items.length}${left?`, ${left} unmarked`:""})</h2><p class="tri-lede">${lede}</p>${left?`<button type="button" class="tri-all" data-tri-all="${k}">Agree to the rest of this lane (${left})</button>`:""}`+items.map(t=>`<div class="tri ${esc(t.ruling)}" data-tid="${esc(t.id)}">
+        <div class="tri-h">Ch ${String(t.chapter).padStart(2,"0")} · line ${esc(t.line||"")} · ${esc(t.src)}</div>
+        <div class="tri-t">${hl(t)}</div>
+        ${t.lane==="cut"&&!t.cutFound&&t.cut?`<div class="tri-r"><b>What comes out:</b> ${esc(t.cut)}</div>`:""}
+        <div class="tri-r"><b>Why:</b> ${esc(t.reason)}</div>
+        <details class="more"><summary>What was filed</summary><div class="nbt">${esc(t.finding)}</div></details>
+        <div class="acts"><button type="button" data-tri="agree" aria-pressed="${t.ruling==="agree"}">Agree</button><button type="button" data-tri="no" aria-pressed="${t.ruling==="no"}">No, keep it open</button>${t.ruling?'<button type="button" data-tri="">Clear</button>':""}</div>
+      </div>`).join("");}).join("");
+  }
+  // ASKS — one card per open row of Fact Check/Asks.md (tools/dashboard-sync.py loads them; the author's press goes back into the file).
+  function asksList(){return state.asks.filter(a=>state.askView==="answered"?!!a.answer:!a.answer);}
+  function asksHTML(){
+    if(!state.asks.length) return '<div class="empty">No asks are loaded yet. Each open row of Fact Check/Asks.md appears here as a card once Claude loads them.</div>';
+    const list=asksList(), nOpen=state.asks.filter(a=>!a.answer).length, nDone=state.asks.length-nOpen;
+    const sub=`<div class="ask-sub" role="group" aria-label="Which asks"><button type="button" data-askview="open" aria-pressed="${state.askView==="open"}">Waiting for you (${nOpen})</button><button type="button" data-askview="answered" aria-pressed="${state.askView==="answered"}">Answered here (${nDone})</button></div>`;
+    if(!list.length) return sub+`<div class="empty">${state.askView==="open"?"Every ask on this page has your answer. Answered here holds them, and each answer can still be changed until Claude writes it into Asks.md.":"Nothing answered here yet."}</div>`;
+    let idx=list.findIndex(a=>a.id===state.askKey); if(idx<0) idx=0;
+    const a=list[idx]; state.askKey=a.id;
+    const nav=`<div class="nav"><button type="button" data-asknav="-1" ${list.length<2?"disabled":""}>◀ Previous</button><span class="pos">${idx+1} of ${list.length} · ${state.askView==="open"?"waiting for you":"answered here"}</span><button type="button" data-asknav="1" ${list.length<2?"disabled":""}>Next ▶</button></div>`;
+    const btn=(v,t)=>`<button type="button" class="${v}" data-ask="${v}" aria-pressed="${a.answer===v}"${a.writtenAt?" disabled":""}>${t}</button>`;
+    const st=a.writtenAt?`<div class="pstate ok">Your answer is in Fact Check/Asks.md since ${esc(fmt(a.writtenAt))}.</div>`
+      :a.answer?`<div class="pstate ok">You answered ${a.answer==="words"?"in your own words":"“"+esc(a.answer)+"”"} ${esc(fmt(a.answeredAt))}${a.words&&a.answer!=="words"?", with your words below":""}. Claude writes it into Fact Check/Asks.md at its next reply. You can change it until then.</div>`
+      :`<div class="pstate">Waiting for your answer. Ok and No can keep your words with them: type in the box first and they are kept with the button you press.</div>`;
+    return `${sub}${nav}<article class="passage">
+      <h2 class="ptitle">${esc(a.aid||a.id)} · ${esc(a.kind)}<span class="badge ${a.answer?"done":"wait"}">${a.answer?"Answered":"Waiting for you"}</span></h2>
+      <div class="ask-meta"><p class="job pz-free"><b class="nbl" style="display:inline;margin-right:6px">What it holds up</b>${esc(a.blocks)}</p></div>
+      ${a.before?`<div class="nb"><span class="nbl">The paragraph before</span><div class="nbt">${esc(a.before)}</div></div>`:""}
+      ${(a.current||[]).map(c=>`<div class="nbl hl">In the book now · ${esc(c.where)}</div><blockquote class="text">${esc(c.text)}</blockquote>`).join("")}
+      ${a.after?`<div class="nb"><span class="nbl">The paragraph after</span><div class="nbt">${esc(a.after)}</div></div>`:""}
+      <div class="prop"><span class="nbl">The ask</span><p class="ask-q">${esc(a.ask)}</p></div>
+      <p class="dep"><b>If you don't answer</b>${esc(a.silence)}</p>
+      <label class="ed" for="askwords-${esc(a.id)}">Your words · kept whole, with Ok or No if you press one<textarea id="askwords-${esc(a.id)}" data-askwords rows="3" class="note"${a.writtenAt?" readonly":""}>${esc(a.words||"")}</textarea></label>
+      ${st}
+      <div class="actions">${btn("ok","Ok")}${btn("no","No")}<button type="button" class="send" data-ask="words"${a.writtenAt?" disabled":""}>Send my words</button>${a.answer&&!a.writtenAt?'<button type="button" class="clear" data-ask="clear">Clear my answer</button>':""}</div>
+      <details class="more"><summary>Where it came from</summary><dl class="meta"><dt>File</dt><dd>Fact Check/Asks.md, line ${esc(a.fileLine)}</dd><dt>Asked</dt><dd>${esc(a.asked)}</dd></dl></details>
+    </article>${nav}`;
+  }
+  // BACK-FILL — works the footnotes cite with no logged read (tools/dashboard-sync.py build), in the chapters in the workflow.
+  const BF={notondrive:{t:"Not in the library",lede:"Cited in the book, and the library index (tools/have.sh) holds no file of this title. Get it, approve citing it unread, or skip it for now.",acts:[["get","I'll get it"],["exception","Approve citing it unread"],["skip","Skip for now"]]},
+            unread:{t:"In the library, no read logged",lede:"The file is in the library and no Claims row names a reader. Back-fill sends it to the Fact-checker to read and log; nothing in the book changes.",acts:[["backfill","Back-fill: read and log it"],["skip","Skip for now"]]}};
+  const BFLABEL={get:"You'll get it",exception:"Approved to cite unread",skip:"Skipped for now",backfill:"Back-fill"};
+  function backfillHTML(){
+    const B=state.backlog; if(!B.length) return '<div class="empty">No back-fill items are loaded yet. They appear here once Claude loads them from check-read.sh.</div>';
+    return `<p class="tri-lede">${B.length} works the footnotes in ${esc(workflowLabel())} cite with no logged read. Nothing in the book is removed from this page. Each press goes to the Fact-checker's back-fill queue (Fact Check/Back-fill Queue.md) at Claude's next reply.</p>`+["notondrive","unread"].map(k=>{
+      const items=B.filter(b=>b.lane===k), left=items.filter(b=>!b.action), shown=items.slice(0,state.bfShow[k]);
+      const all=k==="unread"&&left.length?`<button type="button" class="tri-all" data-bf-all="${k}">Back-fill the rest of this lane (${left.length})</button>`:"";
+      return `<h2 class="tri-lane">${BF[k].t} (${items.length}${left.length?`, ${left.length} unmarked`:""})</h2><p class="tri-lede">${BF[k].lede}</p>${all}`+shown.map(b=>`<div class="tri ${b.action==="skip"?"":b.action?"agree":""}" data-bid="${esc(b.id)}">
+        <p class="bf-title"><i>${esc(b.title)}</i></p>
+        <div class="bf-meta">${esc(b.chapters)} · cited ${esc(b.cites)} time${b.cites==1?"":"s"}${b.drivePath?` · ${esc(b.drivePath)}`:""}</div>
+        ${b.action?`<div class="tri-r"><b>${esc(BFLABEL[b.action]||b.action)}</b>${b.actedAt?` · ${esc(fmt(b.actedAt))}`:""}${b.writtenAt?" · in the queue":""}</div>`:""}
+        <details class="more"><summary>Where the book cites it</summary>${(b.current||[]).map(c=>`<div class="nbl hl">${esc(c.where)}</div><div class="tri-t">${esc(c.text)}</div>`).join("")||'<div class="tri-r">The note lines were not found by title; the chapters are listed above.</div>'}</details>
+        <label class="cm" for="bfnote-${esc(b.id)}">Your note<textarea id="bfnote-${esc(b.id)}" data-bfnote rows="1" placeholder="Saved when you click outside the box">${esc(b.note||"")}</textarea></label>
+        <div class="acts">${BF[k].acts.map(([v,t])=>`<button type="button" data-bf="${v}" aria-pressed="${b.action===v}"${b.writtenAt?" disabled":""}>${t}</button>`).join("")}${b.action&&!b.writtenAt?'<button type="button" data-bf="">Clear</button>':""}</div>
+      </div>`).join("")+(items.length>shown.length?`<button type="button" class="bf-more" data-bf-more="${k}">Show ${Math.min(40,items.length-shown.length)} more of ${items.length-shown.length}</button>`:"");
+    }).join("");
+  }
+  listEl.addEventListener("click",async e=>{
+    const v=e.target.closest("button[data-askview]"); if(v){state.askView=v.dataset.askview; state.askKey=null; render(); return;}
+    const n=e.target.closest("button[data-asknav]"); if(n){const l=asksList(); let i=l.findIndex(a=>a.id===state.askKey); i=(i+Number(n.dataset.asknav)+l.length)%l.length; state.askKey=l[i].id; render(); window.scrollTo({top:0}); return;}
+    const m=e.target.closest("button[data-bf-more]"); if(m){state.bfShow[m.dataset.bfMore]+=40; render(); return;}
+    const b=e.target.closest("button[data-ask]"); const f=e.target.closest("button[data-bf]"); const all=e.target.closest("button[data-bf-all]");
+    if(!b&&!f&&!all) return;
+    if(!state.db){setStatus("This view can't save. Open the page signed in to claude.ai.",true);return;}
+    const now=new Date().toISOString();
+    try{
+      if(b){ const a=state.asks.find(x=>x.id===state.askKey); if(!a) return;
+        const words=(listEl.querySelector("textarea[data-askwords]")||{}).value||"";
+        const act=b.dataset.ask;
+        if(act==="words"&&!words.trim()){setStatus("Type your words in the box first, then press Send my words.",true);return;}
+        const patch=act==="clear"?{answer:"",words:words,answeredAt:""}:{answer:act,words:words.trim(),answeredAt:now};
+        await state.db.doc("asks/"+a.id).update(patch);
+        logPress("ask-"+a.id,{title:"Ask "+(a.aid||a.id)},"ask",b.textContent.trim(),"saved","");
+        setStatus(act==="clear"?"Answer cleared.":"Saved. Claude writes it into Asks.md at its next reply.");
+        if(act!=="clear"&&state.askView==="open"){const l=asksList().filter(x=>x.id!==a.id); state.askKey=l.length?l[0].id:null;}
+      } else if(all){ if(all.dataset.armed!=="1"){all.dataset.armed="1"; all.textContent="Press again to back-fill every unmarked work in this lane"; return;}
+        const ids=state.backlog.filter(x=>x.lane===all.dataset.bfAll&&!x.action).map(x=>x.id);
+        for(const id of ids) await state.db.doc("backlog/"+id).update({action:"backfill",actedAt:now});
+        logPress("backfill-"+all.dataset.bfAll,{title:"Back-fill lane "+all.dataset.bfAll},"backfill-lane","Back-fill the rest ("+ids.length+")","saved","");
+        setStatus("Saved: "+ids.length+" works sent to back-fill.");
+      } else { const id=f.closest(".tri").dataset.bid, act=f.dataset.bf;
+        await state.db.doc("backlog/"+id).update({action:act,actedAt:act?now:""});
+        logPress(id,{title:"Back-fill "+id},"backfill",f.textContent.trim(),"saved",""); setStatus("Saved.");
+      }
+    }catch(err){setStatus("Not saved ("+(err&&err.code||"error")+"). Press it again; if it fails twice, reload the page.",true);}
+  });
+  listEl.addEventListener("focusout",async e=>{
+    const t=e.target; if(!t.matches("textarea[data-bfnote]")||!state.db) return;
+    const id=t.closest(".tri").dataset.bid, b=state.backlog.find(x=>x.id===id), v=t.value.trim();
+    if(!b||(b.note||"")===v) return;
+    try{await state.db.doc("backlog/"+id).update({note:v}); setStatus("Note saved.");}catch(err){setStatus("That note didn't save. Click into it and out again to retry.",true);}
+  });
+  // THE NOTE GATE. The author's rule: every card's note is checked before it reaches the author.
+  // tools/check-card-notes.py checks a card's footnote and the result is stored on the card as
+  // noteCheck {ok, at, text, findings}. A card whose footnote failed, or whose text changed after the
+  // check, or that was checked by Claude (reviewedAt) after the gate time with no note check, is held
+  // here: it shows under "With Claude", never under "Waiting for you", and it has no Approve button.
+  // The gate time is config.noteGateFrom (see PAGE_DEFAULTS at the top of this script).
+  const NOTESEG=/(^|\n\n\u2042\n\n)\[\^[A-Za-z0-9_\-]+\]:/;
+  function noteHeld(p){
+    if(!p||p.status==="approved"||p.status==="applied") return null;
+    const t=p.reviewedPara||p.proposedPara||"";
+    const has=NOTESEG.test(t)||(!p.noteless&&String(p.reviewedNote||p.proposedNote||"").trim());
+    if(!has) return null;
+    const nc=p.noteCheck;
+    if(nc&&nc.text===t) return nc.ok?null:{why:"refused",findings:nc.findings||[],at:nc.at};
+    if(nc||(p.reviewedAt||"")>cfg().noteGateFrom) return {why:"unchecked",findings:[],at:""};
+    return null;
+  }
+  // THE CLOSED-LINE GATE. The author's rule: "If something has been read, fact-checked, approved, and
+  // logged in the fact-checking documentation, do not open it again, ever", and "wire it so no card can
+  // reach the page on a line or note I have already approved."
+  // A card that is not approved or applied is held when it changes a paragraph or a footnote that an approved
+  // or applied card already changed, or when the author pressed Approve on this card and a later version was
+  // written over that approval. The page works this out from the cards and presses it loads, so a card the
+  // Editor writes without running tools/check-card-closed.py is still held. The tool's stored closedCheck adds
+  // the author's rulings from the event log once the author has accepted a sample of it. The author's own
+  // words reopening the line (a decision.recorded hash in reopenedBy, verified by the tool) are the one way past.
+  const CL_BID=/(?:\bblock\s+|\bb:)([0-9a-f]{6})\b/g, CL_SLUG=/\[\^([A-Za-z0-9_\-]+)\]/g, CL_DEF=/^\s*\[\^([A-Za-z0-9_\-]+)\]:/;
+  const CL_INSERT=/goes? after|go after|^\s*after\b|new lines? go|between L\d+/i;
+  const clNorm=s=>String(s||"").replace(/<!--\s*b:[a-z0-9]{6}\s*-->/g,"").replace(/\s+/g," ").trim();
+  const clCh=s=>{const m=String(s||"").match(/Ch\s*0*(\d+)/); return m?Number(m[1]):null;};
+  function clKeys(p,closing){
+    const ch=clCh(p.chapter)||clCh(p.title), out=new Map(); out.add=function(k,l){ if(!this.has(k)) this.set(k,l||""); return this;};
+    (p.current||[]).forEach(c=>{const w=c.where||""; if(CL_INSERT.test(w)) return;
+      [...w.matchAll(CL_BID)].forEach(m=>out.add("b:"+m[1],w)); if(clNorm(c.text)) out.add("t:"+clNorm(c.text),w);
+      [...w.matchAll(CL_SLUG)].forEach(m=>out.add("n:"+ch+":"+m[1],w));});
+    String(p.where||"").split(";").forEach(part=>{ if(CL_INSERT.test(part)||part.includes("new [^")) return;
+      [...part.matchAll(CL_BID)].forEach(m=>out.add("b:"+m[1],part.trim()));
+      [...part.matchAll(CL_SLUG)].forEach(m=>out.add("n:"+(clCh(part)||ch)+":"+m[1],part.trim()));});
+    const t=p.reviewedPara||p.proposedPara||"";
+    segs(t).forEach(s=>{const m=s.match(CL_DEF); if(m&&!closing) out.add("n:"+ch+":"+m[1],"[^"+m[1]+"]"); if(closing&&clNorm(s)) out.add("t:"+clNorm(s));});
+    return out;
+  }
+  function clIndex(){
+    const sig=state.props.size+"|"+state.presses.length+"|"+[...state.props.values()].map(p=>p.status).join("");
+    if(state.clIdx&&state.clIdx.sig===sig) return state.clIdx;
+    const keys=new Map(), pressed=new Map();
+    state.presses.slice().sort((a,b)=>(a.at||"")<(b.at||"")?-1:1).forEach(x=>{ if(x.result!=="saved") return;
+      if(x.action==="approve") pressed.set(x.card,x); else if(x.action==="reopen"||x.action==="withdraw") pressed.delete(x.card);});
+    for(const [g,p] of state.props){
+      if(p.status!=="approved"&&p.status!=="applied") continue;
+      clKeys(p,true).forEach((l,k)=>{ if(!keys.has(k)) keys.set(k,[]); keys.get(k).push({g,t:p.title||g,st:p.status});});
+    }
+    state.clIdx={sig,keys,pressed}; return state.clIdx;
+  }
+  function closedHeld(g){
+    const p=state.props.get(g); if(!p||p.status==="approved"||p.status==="applied") return null;
+    if(cfg().outOfWorkflow.includes(clCh(p.chapter||p.title))) return null;
+    const cc=p.closedCheck, t=p.reviewedPara||p.proposedPara||"";
+    if(p.reopenedBy&&cc&&cc.ok&&cc.reopenedBy===p.reopenedBy&&cc.text===t) return null;
+    const ix=clIndex(), found=[];
+    const pr=ix.pressed.get(g); if(pr) found.push({where:p.where||"",why:`you pressed Approve on this card ${fmt(pr.at)}; this is a later version written over that approval`});
+    clKeys(p,false).forEach((l,k)=>{(ix.keys.get(k)||[]).forEach(c=>{ if(c.g===g) return;
+      found.push({where:l||(k.startsWith("n:")?"[^"+k.split(":")[2]+"]":"the paragraph shown under In the book now"),why:`you approved the card "${c.t}"${c.st==="applied"?" and it is in the book":""}`});});});
+    if(cc&&!cc.ok&&cc.text===t) (cc.findings||[]).forEach(f=>found.push(f));
+    if(!found.length) return null;
+    const seen=new Set(); return {findings:found.filter(f=>{const k=f.why+"|"+f.where; if(seen.has(k)) return false; seen.add(k); return true;})};
+  }
+  function checkedAfterSend(p){return !!(p.submittedAt&&p.reviewedAt&&p.reviewedAt>p.submittedAt);}
+  function readyList(){
+    const out=[];
+    for(const [g,p] of state.props){
+      // The green box lists exactly what the "Ready for you" view shows: stage() applies every hold (closed line, note check, text changed) in one place.
+      if(stage(g)!=="ready") continue;
+      out.push({g,t:p.title||g});
+    }
+    // New cards: written by Claude, never edited, sent or pressed by the author — they wait under "Waiting for you" and are listed here so the author sees them without hunting.
+    const pressed=new Set(state.presses.map(x=>x.card));
+    const fresh=[];
+    for(const [g,p] of state.props){
+      if(p.status!=="yours"||p.editedAt||p.submittedAt||pressed.has(g)||stage(g)) continue;
+      fresh.push({g,t:p.title||g,at:p.reviewedAt||""});
+    }
+    fresh.sort((a,b)=>a.at<b.at?1:-1);
+    const el=$("#ready"), n=out.length+fresh.length, prev=state.readyN==null?n:state.readyN;
+    el.innerHTML=(out.length?`<span class="rb-head">Back from Claude, ready for you to approve: ${out.length}</span><button type="button" class="go" data-v="ready">Go through them one by one ▶</button>`+out.map(x=>`<button type="button" data-jump="${esc(x.g)}" data-view="ready">${esc(x.t)}</button>`).join(""):"")
+      +(fresh.length?`<span class="rb-head"${out.length?' style="margin-top:8px"':''}>New from Claude, for your ruling: ${fresh.length}</span>`+fresh.map(x=>`<button type="button" data-jump="${esc(x.g)}" data-view="todo">${esc(x.t)}</button>`).join(""):"");
+    if(n>prev){el.classList.remove("pulse"); void el.offsetWidth; el.classList.add("pulse");}
+    state.readyN=n;
+    const sent=[...state.props.keys()].filter(g=>stage(g)==="sent"||stage(g)==="held").length;
+    $("#n-ready").textContent=n?`(${n})`:""; $("#n-sent").textContent=sent?`(${sent})`:"";
+    document.title=(n?`(${n} ready) `:"")+"Source Rulings";
+  }
+  async function logPress(g,p,a,label,result,reason){
+    if(!state.db) return;
+    const at=new Date().toISOString();
+    try{await state.db.doc("presses/"+at.replace(/[:.]/g,"-")+"_"+g+"_"+a).set({card:g,title:(p&&p.title)||g,button:label,action:a,at,result,reason:reason||""});}catch(e){}
+  }
+  function unread(){
+    const out=[];
+    for(const [g,p] of state.props){
+      const ev=[["approvedAt","Approved"],["submittedAt","Sent for checking"],["editedAt","Edited"],["reopenedAt","Reopened"],["withdrawnAt","Approval withdrawn"]].filter(([k])=>p[k]).sort((a,b)=>p[b[0]]>p[a[0]]?1:-1);
+      if(!ev.length) continue;
+      const [k,label]=ev[0], at=p[k];
+      if(at>(p.claudeReadAt||"")){const r=state.rows.find(x=>x.group===g); out.push({g,t:p.title||(r&&r.gtitle)||g,label,at});}
+    }
+    out.sort((a,b)=>a.at<b.at?1:-1);
+    $("#unread").innerHTML=out.length?`<span class="ulbl">Not yet read by Claude (${out.length}):</span>`+out.map(x=>`<button type="button" data-jump="${esc(x.g)}">${esc(x.t)} · ${esc(x.label)} ${esc(fmt(x.at))}</button>`).join(""):"";
+  }
+  function render(){
+    tally(); unread(); readyList(); counts(); openWork();
+    const tleft=state.triage.filter(t=>!t.ruling).length; $("#n-triage").textContent=state.triage.length?`(${tleft})`:"";
+    const aleft=state.asks.filter(a=>!a.answer).length; $("#n-asks").textContent=state.asks.length?`(${aleft})`:"";
+    const bleft=state.backlog.filter(b=>!b.action).length; $("#n-backfill").textContent=state.backlog.length?`(${bleft})`:"";
+    if(state.view==="triage"){document.querySelectorAll("#filters button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.v===state.view))); listEl.innerHTML=triageHTML(); return;}
+    if(state.view==="asks"||state.view==="backfill"){document.querySelectorAll("#filters button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.v===state.view))); listEl.innerHTML=state.view==="asks"?asksHTML():backfillHTML(); return;}
+    document.querySelectorAll("#filters button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.v===state.view)));
+    if(!state.rows.length&&!state.props.size){listEl.innerHTML='<div class="empty">No passages are in the store yet.</div>';return;}
+    const list=visibleCards();
+    if(!list.length){listEl.innerHTML=`<div class="empty">${({todo:"Nothing is waiting for you. Approved, going in and In the book hold everything you have decided.",ready:"Nothing is back from Claude right now. When Claude has checked something you sent, it appears here and in the green box at the top.",sent:"Nothing is with Claude for checking.",approved:"Nothing is waiting to go into a chapter.",inbook:"Nothing is in the book yet."})[state.view]||"Nothing here."}</div>`;return;}
+    let idx=list.findIndex(c=>c.key===state.key); if(idx<0) idx=0;
+    const c=list[idx]; state.key=c.key; try{localStorage.setItem("sr-key",c.key);}catch(e){}
+    const nav=`<div class="nav"><button type="button" data-nav="-1" ${list.length<2?"disabled":""}>◀ Previous</button><span class="pos">${idx+1} of ${list.length} · ${({todo:"waiting for you",approved:"approved, going in",inbook:"in the book",all:"all",ready:"ready for you to approve",sent:"with Claude for checking"})[state.view]||"all"}${idx===list.length-1&&list.length>1?" · last one, Next goes back to the first":""}</span><button type="button" data-nav="1" ${list.length<2?"disabled":""}>Next ▶</button></div>`;
+    listEl.innerHTML=`${nav}<article class="passage">
+      <h2 class="ptitle">${esc(c.title)}${(()=>{const st=stage(c.key); const m={closed:["sent","Held: you already approved this line"],held:["sent","Held by the note check"],ready:["ready","Ready for you to approve"],sent:["sent","With Claude for checking"],approved:["sent","Approved, going in"],applied:["done","In the book"]}[st]; return m?`<span class="badge ${m[0]}">${m[1]}</span>`:`<span class="badge ${c.done?"done":"wait"}">${c.done?"Decided":"Waiting for you"}</span>`;})()}</h2>
+      ${c.body}
+    </article>${nav}`;
+  }
+  $("#ready").addEventListener("click",e=>{
+    const v=e.target.closest("button[data-v]"); if(v){state.view="ready"; state.key=null; render(); window.scrollTo(0,0); return;}
+    const b=e.target.closest("button[data-jump]"); if(!b) return;
+    state.view=b.dataset.view||"ready"; state.key=b.dataset.jump; render(); window.scrollTo(0,0);
+  });
+  $("#unread").addEventListener("click",e=>{
+    const b=e.target.closest("button[data-jump]"); if(!b) return;
+    state.view="all"; state.key=b.dataset.jump; render(); window.scrollTo(0,0);
+  });
+  listEl.addEventListener("click",e=>{
+    const b=e.target.closest("button[data-nav]"); if(!b) return;
+    const list=visibleCards(); let idx=list.findIndex(c=>c.key===state.key);
+    idx=(idx+Number(b.dataset.nav)+list.length)%list.length;
+    state.key=list[idx].key; state.flash=null;
+    // after moving, drop the pin on a card that no longer belongs in this view
+    render(); window.scrollTo({top:0});
+  });
+  document.addEventListener("keydown",e=>{
+    if(e.target.closest&&e.target.closest("textarea,input")) return;
+    if(e.key==="ArrowRight"||e.key==="ArrowLeft"){const d=e.key==="ArrowRight"?1:-1; const b=listEl.querySelector(`button[data-nav="${d}"]`)||listEl.querySelector(`button[data-asknav="${d}"]`); if(b&&!b.disabled) b.click();}
+  });
+  $("#filters").addEventListener("click",e=>{
+    const b=e.target.closest("button[data-v]"); if(!b) return;
+    state.view=b.dataset.v; state.key=null; state.flash=null; try{localStorage.setItem("sr-view",state.view);}catch(err){}
+    render();
+  });
+  listEl.addEventListener("click",async e=>{
+    const all=e.target.closest("button[data-tri-all]"), one=e.target.closest("button[data-tri]");
+    if(!all&&!one) return;
+    if(!state.db){setStatus("This view can't save. Open the page signed in to claude.ai.",true);return;}
+    const now=new Date().toISOString();
+    try{
+      if(all){ if(all.dataset.armed!=="1"){all.dataset.armed="1"; all.textContent="Press again to agree to every unmarked item in this lane"; return;}
+        const ids=state.triage.filter(t=>t.lane===all.dataset.triAll&&!t.ruling).map(t=>t.id);
+        for(const id of ids) await state.db.doc("triage/"+id).update({ruling:"agree",ruledAt:now});
+        logPress("triage-"+all.dataset.triAll,{title:"Triage lane "+all.dataset.triAll},"triage-lane","Agree to the rest ("+ids.length+")","saved","");
+        setStatus("Saved: "+ids.length+" items agreed.");
+      } else {
+        const id=one.closest(".tri").dataset.tid, v=one.dataset.tri;
+        await state.db.doc("triage/"+id).update({ruling:v,ruledAt:v?now:""});
+        logPress(id,{title:"Triage "+id},"triage",one.textContent.trim(),"saved","");
+        setStatus("Saved.");
+      }
+    }catch(err){setStatus("Not saved ("+(err&&err.code||"error")+"). Press it again.",true);}
+  });
+  const busy=new Set();
+  listEl.addEventListener("click",async e=>{
+    const b=e.target.closest("button[data-act]"); if(!b) return;
+    const id=b.closest(".src").dataset.id;
+    if(!state.db){setStatus("Rulings can't be saved in this view. Open the page signed in to claude.ai.",true);return;}
+    if(busy.has(id)) return; busy.add(id);
+    const act=b.dataset.act;
+    const patch=act==="clear"?{ruling:"",ruledAt:""}:{ruling:act,ruledAt:new Date().toISOString()};
+    try{await state.db.doc("sources/"+id).update(patch); setStatus("Saved.");}
+    catch(err){setStatus("That ruling didn't save ("+(err&&err.code||"error")+"). Press it again; if it keeps failing, reload the page.",true);}
+    finally{busy.delete(id);}
+  });
+  listEl.addEventListener("focusout",async e=>{
+    const t=e.target; if(!t.matches("textarea[data-note]")) return;
+    const id=t.closest(".src").dataset.id, row=state.rows.find(r=>r.id===id), v=t.value.trim();
+    if(!row||(row.comment||"")===v||!state.db) return;
+    try{await state.db.doc("sources/"+id).update({comment:v}); setStatus("Note saved.");}
+    catch(err){setStatus("That note didn't save ("+(err&&err.code||"error")+"). Click into it and out again to retry.",true);}
+  });
+
+  listEl.addEventListener("input",e=>{
+    const t=e.target; if(!t.matches("textarea[data-pf]")) return;
+    const g=t.closest(".pz").dataset.g, p=state.props.get(g); if(!p) return;
+    const rv=t.dataset.seg!=null?(segs(p.reviewedPara)[+t.dataset.seg]||""):(t.dataset.pf==="proposedPara"?p.reviewedPara:p.reviewedNote);
+    t.classList.toggle("changed",t.value!==rv);
+  });
+  listEl.addEventListener("mousedown",e=>{ if(e.target.closest("button[data-pact]")) e.preventDefault(); });
+  listEl.addEventListener("focusout",async e=>{
+    const t=e.target; if(!t.matches("textarea[data-pf]")||t.readOnly) return;
+    if(e.relatedTarget&&e.relatedTarget.closest&&e.relatedTarget.closest("button[data-pact]")) return;
+    const g=t.closest(".pz").dataset.g, p=state.props.get(g), f=t.dataset.pf;
+    const val=f==="proposedPara"&&p?paraVal(t.closest(".pz"),p):t.value;
+    if(!p||p[f]===val||!state.db) return;
+    try{await state.db.doc("proposals/"+g).update({[f]:val,editedAt:new Date().toISOString()}); setStatus("Your edit is saved. Send it for checking when you're done.");}
+    catch(err){setStatus("That edit didn't save ("+(err&&err.code||"error")+"). Click into the box and out again to retry.",true);}
+  });
+  listEl.addEventListener("click",async e=>{
+    const b=e.target.closest("button[data-pact]"); if(!b) return;
+    const box=b.closest(".pz"), g=box.dataset.g, p=state.props.get(g);
+    if(!p||!state.db){setStatus("This view can't save. Open the page signed in to claude.ai.",true);return;}
+    const pEl=box.querySelector('[data-pf="proposedPara"]'), nEl=box.querySelector('[data-pf="proposedNote"]');
+    const para=pEl?paraVal(box,p):(p.proposedPara||""), note=nEl?nEl.value:(p.proposedNote||"");
+    const now=new Date().toISOString(), a=b.dataset.pact;
+    let patch;
+    if(a==="send") patch={proposedPara:para,proposedNote:note,submittedPara:para,submittedNote:note,status:"submitted",submittedAt:now};
+    else if(a==="undo"&&b.dataset.armed!=="1"){b.dataset.armed="1";b.textContent="Press again to throw away your edits";return;}
+    else if(a==="undo") patch={proposedPara:p.reviewedPara,proposedNote:p.reviewedNote,status:"yours"};
+    else if(a==="approve"&&closedHeld(g)){const why="You have already approved this line; this card is held.";state.flash={g,ok:false,msg:"Not approved. "+why};logPress(g,p,a,b.textContent.trim(),"refused",why);render();return;}
+    else if(a==="approve"){ if(para!==p.reviewedPara||note!==p.reviewedNote){const why="The text in the box differs from the text Claude checked, so this is not approved. Press Send my edits for checking, or Throw away my edits.";state.flash={g,ok:false,msg:"Not approved. "+why};setStatus("Not approved.",true);logPress(g,p,a,b.textContent.trim(),"refused",why);render();return;}
+      patch={status:"approved",approvedAt:now}; }
+    else if(a==="withdraw") patch={status:"yours",approvedAt:"",withdrawnAt:now};
+    else if(a==="reopen") patch={status:"yours",reopenedAt:now,appliedNote:(p.appliedNote||"")+" Reopened "+now.slice(0,10)+"; the chapter still has the applied text until a new version is approved and applied."};
+    b.disabled=true;
+    const names={approve:"Approved",send:"Sent for checking (not approved yet)",undo:"Your edits thrown away",withdraw:"Approval withdrawn",reopen:"Reopened"};
+    try{await state.db.doc("proposals/"+g).update(patch); setStatus("Saving…");
+      setTimeout(()=>{const q=state.props.get(g)||{}; const ok=Object.keys(patch).every(k=>q[k]===patch[k]);
+        state.flash={g,ok,msg:ok?`${names[a]||"Saved"}, saved ${fmt(new Date().toISOString())}. Claude sees it at the top of its next reply.`:`Not saved. Press "${b.textContent.trim()}" again; if it fails twice, reload the page.`};
+        logPress(g,p,a,b.textContent.trim(),ok?"saved":"not saved",ok?"":"The page did not see the change come back from the store within 1.5 seconds.");
+        setStatus(ok?"Saved.":"Not saved.",!ok); render();},1500);}
+    catch(err){b.disabled=false;logPress(g,p,a,b.textContent.trim(),"failed",(err&&(err.code||err.message))||"error");state.flash={g,ok:false,msg:"Not saved ("+(err&&err.code||"error")+"). Press it again; if it fails twice, reload the page."};setStatus("Not saved.",true);render();}
+  });
+
+  (async()=>{
+    const db=window.claude&&window.claude.use?await window.claude.use("db"):null;
+    if(!db){setStatus("This view can't reach the rulings store. Open the page signed in to claude.ai to rule.",true);listEl.innerHTML='<div class="empty">The passages live in the page\'s database, which this view can\'t open.</div>';return;}
+    state.db=db;
+    try{db.collection("config").onSnapshot(snap=>{const d=snap.docs.find(x=>x.id==="page"); state.config=d?d.data():null; state.clIdx=null; applyConfig(); render();},()=>{});}catch(e){}
+    db.collection("sources").orderBy("order").onSnapshot(snap=>{
+      const ae=document.activeElement, act=ae&&ae.matches&&ae.matches("textarea[data-note]")?ae.id:null, draft=act?ae.value:null;
+      const pfd=ae&&ae.matches&&ae.matches("textarea[data-pf]")?{g:ae.closest(".pz").dataset.g,f:ae.dataset.pf,k:ae.dataset.seg,v:ae.value}:null;
+      const open=[...document.querySelectorAll("details.more[open]")].map(d=>d.closest(".src").dataset.id);
+      state.rows=snap.docs.map(d=>Object.assign({id:d.id},d.data()));
+      setStatus(state.rows.length?"":"No passages yet.");
+      render();
+      open.forEach(id=>{const el=document.querySelector(`.src[data-id="${id}"] details.more`); if(el) el.open=true;});
+      if(act){const el=document.getElementById(act); if(el){el.value=draft; el.focus();}}
+      if(pfd){const el=document.querySelector(`.pz[data-g="${pfd.g}"] textarea[data-pf="${pfd.f}"]${pfd.k!=null?`[data-seg="${pfd.k}"]`:""}`); if(el){el.value=pfd.v; el.focus();}}
+    },err=>setStatus("The live connection to the rulings store dropped ("+(err&&err.code||"error")+"). Reload the page.",true));
+    try{db.collection("triage").orderBy("order").onSnapshot(snap=>{state.triage=snap.docs.map(d=>Object.assign({id:d.id},d.data())); render();},()=>{});}catch(e){}
+    try{db.collection("asks").orderBy("order").onSnapshot(snap=>{const ae=document.activeElement,keep=ae&&ae.matches&&ae.matches("textarea[data-askwords]")?{id:ae.id,v:ae.value}:null; state.asks=snap.docs.map(d=>Object.assign({id:d.id},d.data())); render(); if(keep){const el=document.getElementById(keep.id); if(el){el.value=keep.v; el.focus();}}},()=>{});}catch(e){}
+    try{db.collection("backlog").orderBy("order").onSnapshot(snap=>{const ae=document.activeElement,keep=ae&&ae.matches&&ae.matches("textarea[data-bfnote]")?{id:ae.id,v:ae.value}:null; state.backlog=snap.docs.map(d=>Object.assign({id:d.id},d.data())); render(); if(keep){const el=document.getElementById(keep.id); if(el){el.value=keep.v; el.focus();}}},()=>{});}catch(e){}
+    try{db.collection("presses").onSnapshot(snap=>{state.presses=snap.docs.map(d=>d.data()); state.clIdx=null; render();},()=>{});}catch(e){}
+    try{db.collection("register").onSnapshot(snap=>{const d=snap.docs.find(x=>x.id==="summary"); state.register=d?d.data():null; render();},()=>{});}catch(e){}
+    db.collection("proposals").onSnapshot(snap=>{
+      const ae=document.activeElement, pf=ae&&ae.matches&&ae.matches("textarea[data-pf]")?{g:ae.closest(".pz").dataset.g,f:ae.dataset.pf,k:ae.dataset.seg,v:ae.value,s:ae.selectionStart}:null;
+      state.props=new Map(snap.docs.map(d=>[d.id,d.data()])); state.clIdx=null;
+      render();
+      if(pf){const el=document.querySelector(`.pz[data-g="${pf.g}"] textarea[data-pf="${pf.f}"]${pf.k!=null?`[data-seg="${pf.k}"]`:""}`); if(el){el.value=pf.v; el.focus(); try{el.setSelectionRange(pf.s,pf.s);}catch(e){}}}
+    },err=>setStatus("The live connection to the proposals dropped ("+(err&&err.code||"error")+"). Reload the page.",true));
+  })();
+})();
+</script>

@@ -1,0 +1,45 @@
+{
+ "title": "Ch 02 · [^fed1_test]: give the work's full title",
+ "chapter": "Ch 02",
+ "where": "Ch02/L8 [^fed1_test] (block 244556)",
+ "status": "yours",
+ "job": "The note sends a reader to the paper the paragraph quotes.",
+ "current": [
+  {
+   "where": "Ch02/L8 [^fed1_test] (block 244556)",
+   "text": "[^fed1_test]: Hamilton, *Federalist* No. 1. This shows that the founders saw the Constitution as a philosophical experiment in human nature."
+  }
+ ],
+ "proposedPara": "[^fed1_test]: Hamilton, *The Federalist* No. 1. This shows that the founders saw the Constitution as a philosophical experiment in human nature.",
+ "proposedNote": "",
+ "reviewedNote": "",
+ "noteless": true,
+ "paraLabel": "Proposed footnote",
+ "review": "The title matches the Project Gutenberg text, The Federalist Papers.",
+ "reviewedAt": "2026-10-13T12:00:00Z",
+ "reviewedPara": "[^fed1_test]: Hamilton, *The Federalist* No. 1. This shows that the founders saw the Constitution as a philosophical experiment in human nature.",
+ "noteCheck": {
+  "ok": false,
+  "at": "2026-10-13T14:30:00Z",
+  "text": "[^fed1_test]: Hamilton, *The Federalist* No. 1. This shows that the founders saw the Constitution as a philosophical experiment in human nature.",
+  "tool": "tools/check-card-notes.py",
+  "findings": [
+   {
+    "slug": "fed1_test",
+    "where": "Ch02/L8",
+    "pile": "CONTENT",
+    "why": "states something rather than pointing at a page; the card changes no body paragraph to hold it",
+    "clause": "This shows that the founders saw the Constitution as a philosophical experiment in human nature.",
+    "cites": false
+   }
+  ]
+ },
+ "closedCheck": {
+  "ok": true,
+  "at": "2026-10-13T14:30:00Z",
+  "text": "[^fed1_test]: Hamilton, *The Federalist* No. 1. This shows that the founders saw the Constitution as a philosophical experiment in human nature.",
+  "tool": "tools/check-card-closed.py",
+  "reopenedBy": "",
+  "findings": []
+ }
+}

@@ -1,0 +1,25 @@
+{
+ "title": "Ch 01 · Paine's two words: cite the section",
+ "chapter": "Ch 01",
+ "where": "Ch01/L5 (block db8052)",
+ "status": "applied",
+ "job": "The paragraph shows Paine separating society from government; the quotation needs its section named.",
+ "before": "Thomas Paine's pamphlet *Common Sense* reached its readers in 1776, and the edition printed by W. and T. Bradford in Philadelphia is dated February 14, 1776.[^paine_edition]",
+ "after": "He gave each word its own origin: \"Society is produced by our wants, and government by our wickedness.\"[^paine_wants]",
+ "current": [
+  {
+   "where": "Ch01/L5 (block db8052)",
+   "text": "Paine opened his argument by pulling apart two words his readers used as one: \"Society in every state is a blessing, but government even in its best state is but a necessary evil; in its worst state an intolerable one.\" The sentence carries the whole pamphlet's frame."
+  }
+ ],
+ "proposedPara": "Paine opened his argument by pulling apart two words his readers used as one: \"Society in every state is a blessing, but government even in its best state is but a necessary evil; in its worst state an intolerable one.\"[^paine_society] The sentence carries the whole pamphlet's frame.",
+ "reviewedPara": "Paine opened his argument by pulling apart two words his readers used as one: \"Society in every state is a blessing, but government even in its best state is but a necessary evil; in its worst state an intolerable one.\"[^paine_society] The sentence carries the whole pamphlet's frame.",
+ "proposedNote": "",
+ "reviewedNote": "",
+ "noteless": true,
+ "review": "The quotation matches Common Sense, \"Of the Origin and Design of Government in General\". The marker points at [^paine_society], which names that section.",
+ "reviewedAt": "2026-10-13T09:00:00Z",
+ "approvedAt": "2026-10-13T10:00:00Z",
+ "appliedAt": "2026-10-13T11:00:00Z",
+ "appliedNote": "Applied by tools/apply-card.py."
+}

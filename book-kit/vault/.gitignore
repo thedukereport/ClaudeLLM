@@ -1,0 +1,64 @@
+# Allowlist: ignore everything at the top of the vault, then re-admit only what
+# the backup holds. Written by tools/backup-to-github.sh when no .gitignore
+# exists; yours to edit after that. Re-admit FOLDERS and PATTERNS, never file
+# names, so the next new file is in by default.
+/*
+!/.gitignore
+!/book.toml
+!/book.toml.example
+!/*.md
+!/Chapters/
+!/Appendices/
+!/Fact Check/
+!/Methodology/
+!/Handoffs/
+!/Skills/
+!/tools/
+!/tests/
+
+# Never in the repository, wherever they appear. Git keeps each version of a
+# binary whole, so the repository would grow and never shrink; these belong in
+# a snapshot (tools/snapshot-vault.sh).
+*.pdf
+*.epub
+*.mobi
+*.azw3
+*.docx
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.heic
+*.mp3
+*.m4a
+*.wav
+*.mp4
+*.mov
+*.zip
+*.gz
+*.tar
+*.db
+*.sqlite
+*.sqlite3
+
+# Local safety copies and scratch. Version history does their job.
+*.bak
+*.bak-*
+_*
+_to_delete/
+__pycache__/
+*.pyc
+*.log
+.ellipsis-cache/
+.preflight/
+
+# Operating-system and filesystem cruft. Do NOT add a global "*" rule here: a
+# catch-all plus "!*/" re-admits directories at every level and git then
+# descends into the whole vault (in the original system: 1,140 entries staged
+# instead of 46).
+.DS_Store
+._*
+.fuse_hidden*
+Icon?
+.obsidian/workspace*
