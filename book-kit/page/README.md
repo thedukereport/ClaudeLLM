@@ -9,21 +9,27 @@ The page is a claude.ai artifact with a small database. Your presses are saved i
 | View | What it holds |
 |---|---|
 | Ready for you | Cards you sent for checking that Claude has checked. Each one has an Approve button. |
-| With Claude | Cards you sent and Claude has not checked yet, and cards the note check is holding. |
+| With Claude | Cards you sent and Claude has not checked yet, and cards the note check or the prose check is holding. |
 | Waiting for you | New cards for your ruling. |
 | Approved, going in | Cards you approved that are not in the chapter yet. |
 | In the book | Applied cards. Every button still works; "Take a second look" reopens one. |
+| Reopen? | A card that changes a line you already approved. The tab shows only when one is waiting. Press "Reopen this line" or "Keep it closed", with your reason if you want to give one. |
 | Triage | Items from a triage list, by lane (cut, ships as is, drop), with Agree and No. |
 | Asks | Questions Claude needs you to answer, one card at a time. |
-| Back-fill | Works the footnotes cite with no logged read. |
+| Back-fill | Works the footnotes cite that the library index cannot find, with "I'll get it" and "Approve citing it unread". A work in the library that nobody has read never comes here: it goes to the Fact-checker's reading queue (`tools/dashboard-sync.py queue`). |
 | All | Every card. |
 
-A green box at the top lists the cards ready for you and the new ones, and the browser tab shows the count.
+A green box at the top lists the cards ready for you and the new ones, and the browser tab shows the count. The page holds one queue for you: no count appears above the cards unless it opens a list you can work through.
 
-## The three gates
+## Your typing is kept
+
+Every write to the database, from any chat, redraws the page. So the page keeps each keystroke in every box as a draft in this browser (`localStorage`, key `sr-drafts`, kept 14 days), puts each draft back after a redraw with the cursor where it was, and marks the card "Unsaved draft". A draft clears when the saved text equals it, or when you press "Throw away my edits". Drafts live only in the browser you typed in.
+
+## The gates
 
 - **Note check (`noteHeld`).** A card that proposes a footnote is held under "With Claude", with no Approve button, when its stored `noteCheck` failed, when its text changed after the check, or when Claude checked it after the `noteGateFrom` time with no note check. `tools/check-card-notes.py` writes the `noteCheck`.
-- **Closed lines (`closedHeld`).** A card that changes a paragraph or footnote that an approved or applied card already changed is held and hidden from every view except All. So is a card you pressed Approve on that was later rewritten. The page works this out from the cards and presses it already has. `tools/check-card-closed.py` adds your rulings from the event log as `closedCheck`. The one way past is your own decision, recorded in the event log, named in the card's `reopenedBy`.
+- **Prose check (`proseHeld`).** Every card goes through the neurolinguistic-prose skill before it reaches you. A card is held under "With Claude", with no Approve button, until its `proseCheck` says ok for the exact text you would approve (the paragraph box, then the footnote box). `tools/prose.py` records each audit against a hash of that text, so a rewrite makes the audit stale by itself.
+- **Closed lines (`closedHeld`).** A card that changes a paragraph or footnote that an approved or applied card already changed goes to the "Reopen?" view as a whole card. So does a card you pressed Approve on that was later rewritten. The page works this out from the cards and presses it already has. `tools/check-card-closed.py` adds your rulings from the event log as `closedCheck`. Two ways past: your own decision in the event log, named in the card's `reopenedBy`, or your "Reopen this line" press on the card (`lineReopenedAt`, for the text you saw). A new version written over the card holds it again.
 - **Approve only checked text (`stage`, `readyList`).** Approve is refused when the text in the box differs from the text Claude checked. Edit the text, press "Send my edits for checking", and the card comes back to "Ready for you" once Claude has checked it.
 
 ## Publishing the page
@@ -50,9 +56,9 @@ To change the page later, Claude republishes the same file to the same `url`. A 
 | `presses` | press of a card button, with its result | the page |
 | `sources` | source behind a passage, grouped into passage cards by `group` | Claude writes it; your rulings update it |
 | `triage` | triage item | Claude writes it; your Agree or No updates it |
-| `register` | one document, `summary`: the open-work count shown above the cards | Claude |
+| `register` | one document, `summary`: an open-work count. The page no longer shows it | Claude |
 | `asks` | open row of `Fact Check/Asks.md` | `tools/dashboard-sync.py build`, loaded by Claude; your answer updates it |
-| `backlog` | cited work with no logged read | `tools/dashboard-sync.py build`, loaded by Claude; your press updates it |
+| `backlog` | cited work the library index cannot find | `tools/dashboard-sync.py build`, loaded by Claude; your press updates it |
 | `config` | one document, `page`: the page's settings | Claude |
 
 `sources`, `triage`, `asks` and `backlog` are shown in the order of their `order` field, so each document needs one.
@@ -84,22 +90,32 @@ Text fields hold Markdown as it goes into the chapter, footnote markers included
 | `noteCheck` | `{ok, at, text, tool, findings}` from `tools/check-card-notes.py` |
 | `closedCheck` | `{ok, at, text, tool, reopenedBy, findings}` from `tools/check-card-closed.py` |
 | `reopenedBy` | the hash of your `decision.recorded` event reopening a closed line |
+| `proseCheck` | `{ok, state, text, sha, audit, at, tool}` from `tools/prose.py` |
+| `lineReopenedAt`, `lineReopenText`, `lineReopenWords` | written by the page when you press "Reopen this line": when, the text you saw, your words |
+| `lineKeptAt`, `lineKeptText`, `lineKeepWords` | the same for "Keep it closed" |
 | `covers` | ids of `sources` rows this card replaces |
 
 ## How Claude writes a card
 
 1. Build the card as a JSON file, for example `Handoffs/editor-tools/cards/ch02-reflection-choice.json`, with `status: "yours"` and `reviewedPara` equal to `proposedPara`. Read the chapter on disk for `current`, and give each entry its block id.
-2. Run both checks on the file:
+2. Read the card's text under `Skills/neurolinguistic-prose`, write the findings for all fourteen principles to a JSON file, and record the audit:
+
+   ```
+   tools/prose.py --record-card Handoffs/editor-tools/cards/ch02-reflection-choice.json --findings /tmp/findings.json --patch-dir /tmp/patch
+   ```
+
+   An audit that names fewer than fourteen principles is refused. `tools/prose.py` with no arguments lists the open cards on the snapshot with no audit of their current text.
+3. Run the other two checks on the file:
 
    ```
    tools/check-card-notes.py  --card Handoffs/editor-tools/cards/ch02-reflection-choice.json --patch-dir /tmp/patch
    tools/check-card-closed.py --card Handoffs/editor-tools/cards/ch02-reflection-choice.json --patch-dir /tmp/patch
    ```
 
-   A refused note goes back to the Editor to rebuild. A held card is on a line you closed: it does not go to the page unless you reopen the line.
-3. Merge each `noteCheck` and `closedCheck` from the patch files into the card.
-4. Write the card with ArtifactData: `action: "set"`, `collection: "proposals"`, `doc_id: "<card id>"`, `file_path: <the card file>`. Updating an existing card needs `if_version`, the version Claude last read.
-5. Put the card's reads on record: `tools/card-log.py Handoffs/editor-tools/cards/<card id>.reads.json`, then again with `--write`.
+   A refused note goes back to the Editor to rebuild. A card on a line you closed goes to your "Reopen?" view.
+4. Merge each `proseCheck`, `noteCheck` and `closedCheck` from the patch files into the card.
+5. Write the card with ArtifactData: `action: "set"`, `collection: "proposals"`, `doc_id: "<card id>"`, `file_path: <the card file>`. Updating an existing card needs `if_version`, the version Claude last read.
+6. Put the card's reads on record: `tools/card-log.py Handoffs/editor-tools/cards/<card id>.reads.json`, then again with `--write`.
 
 ## Taking the snapshot
 
@@ -138,9 +154,9 @@ Example:
 
 ## The other collections' fields
 
-- `presses`: `card`, `title`, `button`, `action` (approve, send, undo, withdraw, reopen, ask, backfill, triage …), `at`, `result` (saved, refused, not saved, failed), `reason`.
+- `presses`: `card`, `title`, `button`, `action` (approve, send, undo, withdraw, reopen, reopenline, keepclosed, ask, backfill, triage …), `at`, `result` (saved, refused, not saved, failed), `reason`.
 - `sources`: `order`, `group` (the passage card it belongs to), `gtitle`, `chapter`, `code`, `source`, `kind` (`later`: in the chapter now; `new`: new card today; `prop`: earlier card), `question`, `yourDraft`, `sourceSays`, `proposed`, `card`, `firstWith`, `lastWithout`, `notes`, `before`, `para`, `paraWhere`, `paraNote`, `after`, `dep`; the page writes `ruling` (do, dont, skip, delete), `ruledAt`, `comment`.
 - `triage`: `order`, `lane` (cut, ship, drop), `chapter`, `line`, `src`, `text`, `cut`, `cutFound`, `reason`, `finding`; the page writes `ruling` (agree, no) and `ruledAt`.
 - `register/summary`: `total`, `asOf`, `byChapter` (`[{ch, open}]`), `note`.
 - `asks`: written by `tools/dashboard-sync.py build`: `order`, `aid`, `kind`, `ask`, `blocks`, `silence`, `asked`, `fileLine`, `current`, `before`, `after`; the page writes `answer` (ok, no, words), `words`, `answeredAt`; Claude writes `claudeReadAt` and, after `dashboard-sync.py answers --write`, `writtenAt`.
-- `backlog`: written by `tools/dashboard-sync.py build`: `order`, `title`, `lane` (unread, notondrive), `drivePath`, `chapters`, `cites`, `current`; the page writes `action` (backfill, get, exception, skip), `note`, `actedAt`; Claude writes `writtenAt`.
+- `backlog`: written by `tools/dashboard-sync.py build`: `order`, `title`, `lane` (notondrive; works in the library go to `Fact Check/Reading Queue.md` instead), `drivePath`, `chapters`, `cites`, `current`; the page writes `action` (get, exception; older documents may hold backfill or skip), `note`, `actedAt`; Claude writes `writtenAt`.

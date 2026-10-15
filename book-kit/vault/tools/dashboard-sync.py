@@ -4,6 +4,25 @@
     tools/dashboard-sync.py build            # write the cards to load, change nothing else
     tools/dashboard-sync.py answers          # SAMPLE: what the author's presses would write (writes nothing)
     tools/dashboard-sync.py answers --write  # write them (more than five needs a UAT acceptance line)
+    tools/dashboard-sync.py queue            # SAMPLE: the Fact-checker's reading queue (writes the sample only)
+    tools/dashboard-sync.py queue --write    # write Fact Check/Reading Queue.md (more than five needs a UAT line)
+
+THE READING QUEUE
+
+    The author's rule: "The point of scanning the footnote for unread
+    citations IS TO READ THEM, NOT TO TELL ME THEY HAVE NOT BEEN READ." So a
+    work in the library with no logged read never goes to the author. `queue`
+    writes the Fact-checker's reading queue, `Fact Check/Reading Queue.md`, in
+    two parts: works in the library with no logged read (read them), and works
+    the library index cannot find (search again). For each it gives the note
+    lines that cite it and the first recorded write that put the title into
+    the chapter: an `edit.applied` or `file.written` event, or else the git
+    commit. The reader confirms that write and records it with the read. The
+    queue is rebuilt from the book each time; a work leaves when its Claims
+    row names a reader.
+
+    The page's Back-fill view loads only the works the library cannot
+    produce, as "I cannot find it. Can you get it?"
 
 WHOSE WORDS THIS SERVES
 
@@ -211,6 +230,8 @@ def cmd_build():
               f"{rel(INDEX)}; run tools/have.sh to build it. Written to {rel(OUT)}/asks.json; "
               f"nothing else changed.")
         return 0
+    # Only the works the library cannot produce go to the author's page; the rest are the reading queue's.
+    b = [x for x in b if x["data"]["lane"] == "notondrive"]
     (OUT / "backlog.json").write_text(json.dumps(b, ensure_ascii=False, indent=1), encoding="utf-8")
     lanes = {}
     for x in b:
@@ -330,11 +351,126 @@ def cmd_answers(write):
     return 0
 
 
+READING_QUEUE = B.FACT / "Reading Queue.md"
+SAMPLE_DIR = OUT.parent / "samples" / "reading-queue"
+
+
+def chapter_writes():
+    """(ts, kind, file, added, removed, who, via, why, hash) for each chapter write the event log records."""
+    import vaultlog
+    out = []
+    for e in vaultlog.fold("edit.applied"):
+        out.append((e.get("ts", ""), "edit.applied", str(e.get("file") or e.get("path") or e.get("coord") or ""),
+                    e.get("new") or "", e.get("old") or "", e.get("actor", ""),
+                    " · ".join(str(x) for x in (e.get("sheet"), e.get("item")) if x), e.get("why", ""), e.get("hash", "")))
+    for e in vaultlog.fold("file.written"):
+        f = str(e.get("path") or "")
+        if not vaultlog.is_chapter(B.VAULT / f) and "Chapter" not in f:
+            continue
+        diff = e.get("diff") or ""
+        added = "\n".join(l[1:] for l in diff.split("\n") if l.startswith("+") and not l.startswith("+++"))
+        removed = "\n".join(l[1:] for l in diff.split("\n") if l.startswith("-") and not l.startswith("---"))
+        out.append((e.get("ts", ""), "file.written", f, added, removed, e.get("actor", ""), e.get("tool", ""),
+                    e.get("why", ""), e.get("hash", "")))
+    return sorted(out)
+
+
+def first_write(title, ch, writes):
+    """The first recorded write that put *title* into chapter ch: the event log first, then git."""
+    needle = f"*{title}*"
+    path = B.chapter_file(ch)
+    name = path.name if path else ""
+    for ts, kind, f, added, removed, who, via, why, h in writes:
+        if name and name not in f and f"Ch{ch:02d}" not in f:
+            continue
+        if needle in added and needle not in removed:
+            return (f"{ts[:16].replace('T', ' ')} UTC, `{kind}` event `{h}`, {who}"
+                    + (f" ({via})" if via else "") + (f": {why[:200]}" if why else ""))
+    if not path:
+        return "the chapter file was not found; the reader looks it up"
+    import subprocess
+    try:
+        r = subprocess.run(["git", "log", "-S", needle, "--reverse", "--format=%ad|%h|%s", "--date=short", "--",
+                            str(path.relative_to(B.VAULT))], cwd=str(B.VAULT), capture_output=True, text=True,
+                           timeout=60)
+        line = (r.stdout.strip().split("\n") or [""])[0]
+    except Exception as exc:                                  # noqa: BLE001
+        return f"git could not be asked ({type(exc).__name__}); the reader looks it up"
+    if not line:
+        return "no recorded write found in the event log or in git; the reader looks it up"
+    day, h, subj = line.split("|", 2)
+    return f"{day}, git commit `{h}`: {subj[:200]}"
+
+
+PARTS = [("unread", "1. In the library, no read logged — read these",
+          "Open the file named, read the part the note cites (heading to heading), and log the read in the "
+          "chapter's Claims file, the chapter's ledger and the event log (`source.read`), with the write that "
+          "put the citation in the book."),
+         ("notondrive", "2. The library index found no copy — search again",
+          "Search the library again: an empty search means a broken pointer. A copy found moves the work to "
+          "part 1. A work still not found stays on the author's Back-fill view as \"I cannot find it. Can you "
+          "get it?\"")]
+
+
+def queue_md(rows, limit=None):
+    today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    out = ["# Reading Queue — the Fact-checker's", "",
+           f"Built {today} by `tools/dashboard-sync.py queue` from the footnotes of the chapters in the workflow "
+           "and the Claims files. Rebuilt from the book each time: a work leaves when its Claims row names a "
+           "reader. Nothing here goes to the author.", ""]
+    for lane, head, lede in PARTS:
+        items = [d for d in rows if d["lane"] == lane]
+        out += [f"## {head} ({len(items)})", "", lede, ""]
+        for d in (items[:limit] if limit else items):
+            out.append(f"### *{d['title']}*")
+            out.append(f"- cited {d['cites']} time{'s' if d['cites'] != 1 else ''}: {d['chapters']}")
+            if d.get("drivePath"):
+                out.append(f"- in the library: `{d['drivePath']}`")
+            for c in d.get("current") or []:
+                out.append(f"- {c['where']}: {c['text'][:400]}{'…' if len(c['text']) > 400 else ''}")
+            out.append(f"- how it came into the book: {d.get('entered', '')}")
+            out.append("")
+        if limit and len(items) > limit:
+            out += [f"… and {len(items) - limit} more in this part.", ""]
+    return "\n".join(out) + "\n"
+
+
+def cmd_queue(write):
+    built = build_backlog()
+    if built is None:
+        print(f"NOT BUILT — no library index at {rel(INDEX)}; run tools/have.sh to build it.")
+        return 1
+    rows = [x["data"] for x in built]
+    writes = chapter_writes()
+    for d in rows:
+        cur = d.get("current") or []
+        m = re.search(r"Ch(\d+)/L\d+", cur[0]["where"]) if cur else None
+        d["entered"] = (first_write(d["title"], int(m.group(1)), writes) if m
+                        else "the citing note line was not found by title; the reader looks it up")
+    lanes = {k: sum(1 for d in rows if d["lane"] == k) for k, _, _ in PARTS}
+    if not write:
+        SAMPLE_DIR.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M")
+        (SAMPLE_DIR / f"sample-{stamp}.md").write_text(queue_md(rows, limit=4), encoding="utf-8")
+        (SAMPLE_DIR / f"full-{stamp}.md").write_text(queue_md(rows), encoding="utf-8")
+        print(f"SAMPLE: {lanes}; written to {rel(SAMPLE_DIR)}/sample-{stamp}.md. "
+              f"{rel(READING_QUEUE)} is not written until --write.")
+        return 0
+    import uat, vaultlog
+    uat.require_acceptance("tools/dashboard-sync.py queue", len(rows))
+    vaultlog.write_file(READING_QUEUE, queue_md(rows), tool="tools/dashboard-sync.py queue",
+                        why="the unread-citation scan feeds the Fact-checker's reading queue")
+    print(f"Wrote {rel(READING_QUEUE)}: {lanes}.")
+    return 0
+
+
 if __name__ == "__main__":
     a = sys.argv[1:]
     if not a or a[0] == "build":
         sys.exit(cmd_build())
     elif a[0] == "answers":
         sys.exit(cmd_answers("--write" in a))
+    elif a[0] == "queue":
+        sys.exit(cmd_queue("--write" in a))
     else:
         print(__doc__)

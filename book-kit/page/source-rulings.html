@@ -28,9 +28,9 @@
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--body);padding-inline:16px;padding-block:0 48px}
 .wrap{max-width:860px;margin:0 auto}
-header.top{padding-block:32px 16px;display:grid;gap:10px}
+header.top{padding-block:18px 10px;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px}
 .eyebrow{font:500 12px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-h1{font:600 clamp(28px,5vw,38px)/1.1 var(--display);margin:0;text-wrap:balance}
+h1{font:600 clamp(24px,4vw,30px)/1.1 var(--display);margin:0;text-wrap:balance}
 .lede{margin:0;color:var(--muted);max-width:65ch}
 .rubric-sum{cursor:pointer;font:500 13px/1.4 var(--body);color:var(--accent)} .rubric-wrap .rubric{margin-top:8px}
 .rubric{display:grid;gap:6px;background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:14px 16px;font-size:14px;max-width:72ch}
@@ -41,10 +41,11 @@ h1{font:600 clamp(28px,5vw,38px)/1.1 var(--display);margin:0;text-wrap:balance}
 .tally{display:flex;gap:14px;flex-wrap:wrap;font:500 13px/1 var(--mono);font-variant-numeric:tabular-nums}
 .tally b{font-weight:600}
 .t-do{color:var(--keep)} .t-cut{color:var(--cut)}
-.filters{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+.filters{display:flex;gap:6px;flex-wrap:wrap}
 .filters button{font:500 13px/1 var(--body);padding:7px 11px;border-radius:999px;border:1px solid var(--rule);background:var(--surface);color:var(--ink);cursor:pointer}
 .filters button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--surface)}
-.status{font:13px/1.4 var(--body);color:var(--muted);padding-block:10px 0;min-height:1.4em}
+.status{font:13px/1.4 var(--body);color:var(--muted);padding-block:8px 0}
+.status:empty{display:none}
 .status.err{color:var(--cut)}
 main{display:grid;gap:22px;padding-top:18px}
 article.passage{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:18px;display:grid;gap:14px}
@@ -97,6 +98,9 @@ label.ed textarea{font:16px/1.6 var(--display);text-transform:none;letter-spacin
 label.ed textarea.note{font:14px/1.55 var(--body)}
 label.ed textarea.changed{border-color:var(--warn);background:var(--warn-soft)}
 .out{font-size:14px;max-width:72ch} .out ul{margin:4px 0 0;padding-left:20px} .out li{margin-bottom:4px}
+textarea.drafty{border-color:#c98a2e!important;box-shadow:0 0 0 2px rgba(201,138,46,.25)}
+.draft-badge{display:inline-block;margin-left:10px;padding:1px 8px;border-radius:10px;background:#fdf1dc;color:#7a4e0c;font:600 11px/1.6 var(--mono,monospace);letter-spacing:.04em;text-transform:uppercase;vertical-align:middle}
+.chk.reo{background:var(--new-soft);border-left:4px solid var(--accent,#2f5d5a)}
 .chk{padding:10px 12px;border-radius:6px;background:var(--new-soft);font-size:14px;white-space:pre-wrap;max-width:76ch}
 .pstate{font:500 13px/1.4 var(--body);color:var(--muted)}
 .pstate.ok{color:var(--keep)}
@@ -153,30 +157,46 @@ label.ed textarea.changed{border-color:var(--warn);background:var(--warn-soft)}
 .bf-title{font:600 16px/1.35 var(--display);margin:0}
 .bf-meta{font:12.5px/1.5 var(--mono);color:var(--muted);overflow-wrap:anywhere}
 .bf-more{font:inherit;font-size:14px;padding:8px 14px;border-radius:6px;border:1px solid var(--rule);background:var(--surface);color:var(--ink);cursor:pointer;margin:6px 0 14px}
+.desk{margin:12px 0 0;border:1px solid var(--rule);border-radius:10px;background:var(--surface)}
+.desk>summary{list-style:none;cursor:pointer;display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:10px 14px;font:500 14px/1.4 var(--body)}
+.desk>summary::-webkit-details-marker{display:none}
+.desk>summary .dk-t{font-weight:700;margin-right:4px}
+.desk>summary .dk-t::before{content:"\25B8";display:inline-block;width:1.1em;color:var(--muted);transition:transform .15s}
+.desk[open]>summary .dk-t::before{transform:rotate(90deg)}
+.dk-chip{font:600 12.5px/1 var(--body);padding:6px 9px;border-radius:999px;background:var(--bg);border:1px solid var(--rule);white-space:nowrap;font-variant-numeric:tabular-nums}
+.dk-chip.go{background:var(--keep);border-color:var(--keep);color:var(--surface)}
+.dk-chip.new{background:var(--new-soft);border-color:transparent;color:var(--new)}
+.dk-chip.warn{background:var(--warn-soft);border-color:transparent;color:var(--warn)}
+.dk-none{color:var(--muted);font-weight:400}
+.dk-hint{margin-left:auto;font:12px/1 var(--mono);color:var(--muted)}
+.desk.pulse{animation:rbp 1.2s ease-out 2}
+@media (prefers-reduced-motion:reduce){.desk.pulse{animation:none}}
+.desk-body{display:grid;gap:12px;padding:0 14px 14px;border-top:1px solid var(--rule)}
+.desk-body .readybar,.desk-body .openwork{margin:12px 0 0}
+.desk-body .unread{margin:0;max-height:300px;overflow:auto}
+.desk-body .unread .ulbl{display:block;margin-bottom:4px}
+.desk-body .unread button{display:block;text-align:left;margin:0 0 6px;border-bottom:0;padding:0}
+.desk-body .unread button:hover{text-decoration:underline}
+.dk-how .lede{margin:8px 0}
+.tri-card mark{background:color-mix(in srgb,var(--cut) 22%,transparent);text-decoration:line-through;color:inherit}
+.tri-card .actions button.go[aria-pressed="true"]{background:var(--keep);border-color:var(--keep);color:var(--surface)}
+.tri-card .actions button.send[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+.tri-held{margin:6px 0;padding:8px 10px;border-radius:6px;background:var(--warn-soft);font-size:14px}
 .foot{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid var(--rule);padding-top:14px;max-width:65ch}
 </style>
 
 <div class="wrap">
   <header class="top">
-    <div class="eyebrow"><span id="book-title">Your book</span> · cards for your ruling</div>
     <h1>Source Rulings</h1>
-    <p class="lede">One card at a time; Previous and Next, or the arrow keys, move you through. A green box at the top lists what Claude has checked and sent back to you, and the browser tab shows the number. <b>Waiting for you</b> holds what needs your decision. <b>Approved, going in</b> holds what you approved that is not in the chapter yet. <b>In the book</b> holds what is done; every button there still works. <b>Asks</b> holds what Claude needs from you, one card at a time. <b>Back-fill</b> lists the works the book cites with no logged read.</p>
-    <details class="rubric-wrap"><summary class="rubric-sum">What the buttons mean</summary><div class="rubric" role="note" aria-label="How to rule">
-      <div><b class="r-do">Do it</b>Yes to the question as asked.</div>
-      <div><b class="r-cut">Don't do it</b>No. The source comes out and your sentence stays, or the card's change doesn't go in.</div>
-      <div><b class="r-skip">Skip</b>Not now. It stays on the list.</div>
-      <div><b class="r-cut">Delete</b>Take out the source and the passage it supports.</div>
-      <div class="fine">Each Don't do it or Delete comes back to you as a proposal card, with the exact text, for you to approve. Where a passage has a Proposal box, you can edit the proposed paragraph and footnote directly. Claude checks each edit you send against the source and the chapter, and writes the result in the box. Once you approve, the change goes into the chapter by unlock, edit, relock, push.</div>
-    </div>
-  </details>
+    <div class="eyebrow"><span id="book-title">Your book</span> · cards for your ruling</div>
   </header>
 
-  <div class="bar" role="region" aria-label="Tally and filters">
-    <div class="tally" id="tally"></div>
+  <div class="bar" role="region" aria-label="Views">
     <div class="filters" id="filters">
       <button type="button" data-v="ready" aria-pressed="false">Ready for you<span class="n" id="n-ready"></span></button>
       <button type="button" data-v="sent" aria-pressed="false">With Claude<span class="n" id="n-sent"></span></button>
       <button type="button" data-v="todo" aria-pressed="true">Waiting for you<span class="n" id="n-todo"></span></button>
+      <button type="button" data-v="reopen" aria-pressed="false" hidden>Reopen?<span class="n" id="n-reopen"></span></button>
       <button type="button" data-v="approved" aria-pressed="false">Approved, going in<span class="n" id="n-approved"></span></button>
       <button type="button" data-v="inbook" aria-pressed="false">In the book<span class="n" id="n-inbook"></span></button>
       <button type="button" data-v="triage" aria-pressed="false">Triage<span class="n" id="n-triage"></span></button>
@@ -185,10 +205,26 @@ label.ed textarea.changed{border-color:var(--warn);background:var(--warn-soft)}
       <button type="button" data-v="all" aria-pressed="false">All</button>
     </div>
   </div>
+  <details class="desk" id="desk">
+    <summary id="desk-sum"><span class="dk-t">Your desk</span><span class="dk-none">Loading…</span></summary>
+    <div class="desk-body">
+      <div class="readybar" id="ready" aria-live="polite"></div>
+      <div class="unread" id="unread" aria-live="polite"></div>
+      <div class="openwork" id="openwork" aria-live="polite"></div>
+      <details class="dk-how rubric-wrap"><summary class="rubric-sum">How this page works</summary>
+        <p class="lede">One card at a time; Previous and Next, or the arrow keys, move you through. Your desk, the bar you open and close under the buttons, lists what Claude has checked and sent back to you, the new cards, and what Claude has not yet read; its top line shows the counts, and the browser tab shows the number ready for you. <b>Waiting for you</b> holds what needs your decision. <b>Approved, going in</b> holds what you approved that is not in the chapter yet. <b>In the book</b> holds what is done; every button there still works. <b>Asks</b> holds what Claude needs from you, one card at a time. <b>Reopen?</b> shows, whole, a card that would change a line you approved; Reopen this line sends it to Waiting for you, and Keep it closed ends it. <b>Back-fill</b> lists the works the book cites that Claude cannot find in the library.</p>
+        <span class="rubric-sum" style="cursor:default">What the buttons mean</span>
+        <div class="rubric" role="note" aria-label="How to rule">
+      <div><b class="r-do">Do it</b>Yes to the question as asked.</div>
+      <div><b class="r-cut">Don't do it</b>No. The source comes out and your sentence stays, or the card's change doesn't go in.</div>
+      <div><b class="r-skip">Skip</b>Not now. It stays on the list.</div>
+      <div><b class="r-cut">Delete</b>Take out the source and the passage it supports.</div>
+      <div class="fine">Each Don't do it or Delete comes back to you as a proposal card, with the exact text, for you to approve. Where a passage has a Proposal box, you can edit the proposed paragraph and footnote directly. Claude checks each edit you send against the source and the chapter, and writes the result in the box. Once you approve, the change goes into the chapter by unlock, edit, relock, push.</div>
+    </div>
+      </details>
+    </div>
+  </details>
   <div class="status" id="status" role="status">Loading the passages…</div>
-  <div class="openwork" id="openwork" aria-live="polite"></div>
-  <div class="readybar" id="ready" aria-live="polite"></div>
-  <div class="unread" id="unread" aria-live="polite"></div>
 
   <main id="list">
     <div class="empty">The passages load here: one card per passage in the book, each listing the sources behind it.</div>
@@ -209,7 +245,7 @@ label.ed textarea.changed{border-color:var(--warn);background:var(--warn-soft)}
   //   footer         a sentence added to the footer, e.g. how the source cards are numbered
   const PAGE_DEFAULTS={bookTitle:"Your book",outOfWorkflow:[],workflowLabel:"",noteGateFrom:"1970-01-01T00:00:00Z",footer:""};
   const LABEL={later:"In the chapter now",new:"New card today",prop:"Earlier card"};
-  const state={config:null,rows:[],props:new Map(),view:"todo",key:null,db:null,flash:null,register:null,triage:[],asks:[],askKey:null,askView:"open",backlog:[],bfShow:{notondrive:40,unread:40},presses:[],clIdx:null};
+  const state={config:null,rows:[],props:new Map(),view:"todo",key:null,db:null,flash:null,register:null,triage:[],asks:[],askKey:null,askView:"open",backlog:[],bfShow:{notondrive:40,unread:40},presses:[],clIdx:null,triView:"open",triKey:null};
   try{let v=localStorage.getItem("sr-view"); if(v==="done") v="inbook"; if(v) state.view=v; const k=localStorage.getItem("sr-key"); if(k) state.key=k;}catch(e){}
   // A link straight to one card: ...#card=<card id> opens that card under "All", whatever view was last used.
   try{const m=location.hash.match(/^#card=([A-Za-z0-9_\-]+)$/); if(m){state.view="all"; state.key=m[1];}}catch(e){}
@@ -230,10 +266,14 @@ label.ed textarea.changed{border-color:var(--warn);background:var(--warn-soft)}
   const setStatus=(t,err)=>{statusEl.textContent=t;statusEl.classList.toggle("err",!!err);};
   const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
 
-  function tally(){
-    const live=state.rows.filter(r=>!coveredBy(r)), n=live.length, c=v=>live.filter(r=>r.ruling===v).length;
-    const d=c("do"),x=c("dont"),s=c("skip"),del=c("delete");
-    $("#tally").innerHTML=`<span><b>${n-d-x-s-del}</b> to rule</span><span class="t-do"><b>${d}</b> do it</span><span class="t-cut"><b>${x}</b> don't</span><span class="t-cut"><b>${del}</b> delete</span><span><b>${s}</b> skipped</span>`;
+  // YOUR DESK. The ready list, the new cards, the not-yet-read list and the page's instructions share one fold;
+  // its summary line gives the counts. Open or closed is remembered in this browser.
+  function deskSum(){
+    const d=state.desk||{}, chips=[];
+    if(d.ready) chips.push(`<span class="dk-chip go">${d.ready} ready to approve</span>`);
+    if(d.fresh) chips.push(`<span class="dk-chip new">${d.fresh} new from Claude</span>`);
+    if(d.unread) chips.push(`<span class="dk-chip warn">${d.unread} not yet read by Claude</span>`);
+    $("#desk-sum").innerHTML=`<span class="dk-t">Your desk</span>${chips.join("")||'<span class="dk-none">Nothing new from Claude</span>'}<span class="dk-hint">${$("#desk").open?"close":"open"}</span>`;
   }
   function show(r){
     const f=state.filter;
@@ -267,18 +307,22 @@ label.ed textarea.changed{border-color:var(--warn);background:var(--warn-soft)}
       btns=`<button type="button" data-pact="reopen">Take a second look: reopen for changes</button>`;}
     else if(p.status==="approved"){st=`<div class="pstate ok">You approved this ${esc(fmt(p.approvedAt))}. Next: unlock, edit, relock, push. Send any message in the chat and Production applies it with tools/apply-card.py.</div>`;
       btns=`<button type="button" data-pact="withdraw">Withdraw approval</button>`;}
-    else if(closedHeld(g)){const h=closedHeld(g);
-      st=`<div class="chk"><b>Held: you have already approved this line.</b> This card changes a paragraph or footnote you approved, so it does not come to you. It stays held unless you reopen the line in your own words.${h.findings.map(f=>`\n• ${f.where}: ${f.why}`).join("")}</div>`;
-      btns="";}
+    else if(closedHeld(g)){const h=closedHeld(g), kept=lineKept(p);
+      st=`<div class="chk reo"><b>${kept?`You kept this line closed ${esc(fmt(p.lineKeptAt))}.`:"You approved this line before."}</b> ${kept?"The Editor withdraws this card. Press Reopen this line if you want the change after all.":"This card proposes a change to it. The change goes in only if you reopen the line here; then the card comes to Waiting for you like any other."}${h.findings.map(f=>`\n• ${esc(f.where)}: ${esc(f.why)}`).join("")}</div>
+      <label class="cm">Your words, if you want to give a reason (saved with your press)<textarea data-reowords rows="2" placeholder="Optional">${esc(p.lineReopenWords||p.lineKeepWords||"")}</textarea></label>`;
+      btns=`<button type="button" class="go" data-pact="reopenline">Reopen this line</button>${kept?"":`<button type="button" data-pact="keepclosed">Keep it closed</button>`}`;}
     else if(noteHeld(p)){const h=noteHeld(p);
       st=`<div class="chk"><b>Held by the note check${h.at?` (${esc(fmt(h.at))})`:""}.</b> ${h.why==="refused"?"Its footnote breaks your note rules, so it does not come to you until the Editor rebuilds it:":"Its footnote has not been through the note check since its text last changed, so it does not come to you yet."}${(h.findings||[]).map(f=>`\n• ${f.where||""} ${f.slug?"[^"+f.slug+"]":""} ${f.pile}: ${f.why}${f.clause?`\n   "${f.clause}"`:""}`).join("")}</div>`;
+      btns="";}
+    else if(proseHeld(p)){const h=proseHeld(p);
+      st=`<div class="chk"><b>With Claude: the prose check ${h.why==="stale"?"was run on an earlier version of this text":"has not been run on this text"}.</b> Claude runs the neurolinguistic prose skill on the text you would approve and records it with prose.py. The card comes to you after that record exists for these exact words.</div>`;
       btns="";}
     else if(p.status==="submitted"&&!checkedAfterSend(p)&&p.proposedPara===p.submittedPara&&p.proposedNote===p.submittedNote){st=`<div class="pstate"><b>Sent for checking ${esc(fmt(p.submittedAt))}. Not approved yet.</b> Claude checks your text at its next reply in the chat. When it has, an <b>Approve for the chapter</b> button appears here, and the card is listed at the top of the page under "Ready for you to approve."</div>`;}
     else if(ed){st=`<div class="pstate">You've edited this text. Send it to Claude for checking before approving.</div>`;
       btns=`<button type="button" class="send" data-pact="send">Send my edits for checking</button><button type="button" class="clear" data-pact="undo">Throw away my edits</button>`;}
     else {st=`<div class="pstate">${checkedAfterSend(p)?`<b>Claude checked the text you sent (${esc(fmt(p.reviewedAt))}). Not approved yet.</b> Press Approve to send it to the chapter, or edit either box.`:"Claude has checked this text. Edit either box, or approve it as it stands."}</div>`;
       btns=`<button type="button" class="go" data-pact="approve">Approve for the chapter</button>`;}
-    const lock=p.status==="approved"||p.status==="applied"?" readonly":"";
+    const lock=p.status==="approved"||p.status==="applied"||closedHeld(g)?" readonly":"";
     return `<section class="pz" data-g="${esc(g)}">
       <h3>Proposal · ${esc(p.where||"")}</h3>
       ${p.job?`<p class="job"><b>${esc(p.jobLabel||"The paragraph's job")}</b>${esc(p.job)}</p>`:""}
@@ -326,8 +370,8 @@ ${p.noteless?"":`<label class="ed">${esc(p.noteLabel||"Proposed footnote")} · y
     const p=state.props.get(g); if(!p) return "";
     if(p.status==="applied") return "applied";
     if(p.status==="approved") return "approved";
-    if(closedHeld(g)) return "closed";
-    if(noteHeld(p)) return "held";
+    if(closedHeld(g)) return lineKept(p)?"kept":"closed";
+    if(noteHeld(p)||proseHeld(p)) return "held";
     if(p.status==="submitted"&&!checkedAfterSend(p)) return "sent";
     if(checkedAfterSend(p)&&p.proposedPara===p.reviewedPara&&p.proposedNote===p.reviewedNote) return "ready";
     return "";
@@ -343,7 +387,8 @@ ${p.noteless?"":`<label class="ed">${esc(p.noteLabel||"Proposed footnote")} · y
   }
   function inView(c,v){
     const st=stage(c.key);
-    if(st==="closed") return false;
+    if(v==="reopen") return st==="closed";
+    if(st==="closed"||st==="kept") return false;
     if(v==="ready") return st==="ready";
     if(v==="sent") return st==="sent"||st==="held";
     if(v==="approved") return st==="approved";
@@ -352,31 +397,64 @@ ${p.noteless?"":`<label class="ed">${esc(p.noteLabel||"Proposed footnote")} · y
   }
   function counts(){
     const all=cardsAll(), n=v=>all.filter(c=>inView(c,v)).length;
-    [["todo","n-todo"],["approved","n-approved"],["inbook","n-inbook"]].forEach(([v,id])=>{const k=n(v); $("#"+id).textContent=k?`(${k})`:"";});
+    [["todo","n-todo"],["approved","n-approved"],["inbook","n-inbook"],["reopen","n-reopen"]].forEach(([v,id])=>{const k=n(v); $("#"+id).textContent=k?`(${k})`:"";});
+    const rb=document.querySelector('#filters button[data-v="reopen"]'); if(rb) rb.hidden=!n("reopen")&&state.view!=="reopen";
   }
+  // THE OPEN-WORK COUNT IS OFF THE PAGE. A count that opens no list the author can work through does not belong on
+  // the author's one queue. The register document stays in the database.
   function openWork(){
-    const r=state.register, el=$("#openwork");
-    if(!r||!r.total){el.innerHTML="";return;}
-    const chs=(r.byChapter||[]).map(x=>`<span class="ow-ch">Ch ${esc(String(x.ch).padStart(2,"0"))} · ${esc(x.open)}</span>`).join("");
-    el.innerHTML=`<span class="ow-head">Open work, ${esc(workflowLabel())}: ${esc(r.total)} items, read against the text ${esc(r.asOf||"")}</span>${chs}<span class="ow-src">${esc(r.note||"")}</span>`;
+    state.desk=Object.assign(state.desk||{},{open:0});
+    const el=$("#openwork"); if(el) el.innerHTML="";
   }
   const SEP="\n\n\u2042\n\n";
   const segs=t=>String(t||"").split(SEP);
   function paraVal(box,p){const ss=[...box.querySelectorAll('textarea[data-pf="proposedPara"]')]; if(!ss.length) return p.proposedPara||""; return ss.length>1||p.segLabels?ss.map(x=>x.value).join(SEP):ss[0].value;}
+  // TRIAGE — one item at a time, like the other cards. Each item: the line, the words to take out, why, what was
+  // filed; the author's version of the line (editable); the author's words to the Editor; buttons Agree · Use my
+  // version · This is a directive · No, keep it open.
+  const TRILANE={hold:"Held for re-checking: words to take out",cut:"Cut: the words shown come out",ship:"Ships as is",drop:"Drop"};
+  const TRILEDE={hold:"This item was in the Cut lane. It was moved here to be checked again. The struck-through words are what would come out. Your rule stands: a claim does not come out for want of a source; the source is asked for instead.",
+    cut:"The struck-through words are what would come out.",ship:"The book keeps this sentence as it is, and the item closes.",drop:"The book stays as it is; the item asked for something the book does not need, for the reason given."};
+  const TRIRULED={agree:"You agreed",mine:"You gave your version",directive:"You gave a directive",no:"You said no, keep it open"};
+  const LANEORDER={hold:0,cut:1,ship:2,drop:3};
+  function triList(){
+    const T=state.triage.slice().sort((x,y)=>(LANEORDER[x.lane]??9)-(LANEORDER[y.lane]??9)||(x.order||0)-(y.order||0));
+    if(state.triView==="ruled") return T.filter(t=>t.ruling&&!triHeld(t));
+    if(state.triView==="held") return T.filter(t=>triHeld(t));
+    return T.filter(t=>!t.ruling&&!triHeld(t));
+  }
   function triageHTML(){
     const T=state.triage; if(!T.length) return '<div class="empty">No triage items.</div>';
-    const lanes=[["cut","Cut: the words shown come out","Each item names words to remove. Struck-through words are what comes out; where the item names a whole note or sentence, the instruction says so."],["ship","Ships as is","The book keeps these sentences as they are, and the register item closes."],["drop","Drop","No change to the book; the item asked for something the book does not need, for the reason given."]];
-    const hl=t=>{const x=esc(t.text); if(t.lane!=="cut"||!t.cutFound) return x; const c=esc(t.cut.trim()); const i=x.indexOf(c); return i<0?x:x.slice(0,i)+"<mark>"+c+"</mark>"+x.slice(i+c.length);};
-    return `<p class="tri-lede">${T.length} items from the triage list, read in their chapters. Agree or No on each; "Agree to the rest" marks every item in that lane you have not marked. Nothing changes in the book until the daily batch, and only for items you agreed to.</p>`+lanes.map(([k,title,lede])=>{
-      const items=T.filter(t=>t.lane===k), left=items.filter(t=>!t.ruling).length;
-      return `<h2 class="tri-lane">${title} (${items.length}${left?`, ${left} unmarked`:""})</h2><p class="tri-lede">${lede}</p>${left?`<button type="button" class="tri-all" data-tri-all="${k}">Agree to the rest of this lane (${left})</button>`:""}`+items.map(t=>`<div class="tri ${esc(t.ruling)}" data-tid="${esc(t.id)}">
-        <div class="tri-h">Ch ${String(t.chapter).padStart(2,"0")} · line ${esc(t.line||"")} · ${esc(t.src)}</div>
-        <div class="tri-t">${hl(t)}</div>
-        ${t.lane==="cut"&&!t.cutFound&&t.cut?`<div class="tri-r"><b>What comes out:</b> ${esc(t.cut)}</div>`:""}
-        <div class="tri-r"><b>Why:</b> ${esc(t.reason)}</div>
-        <details class="more"><summary>What was filed</summary><div class="nbt">${esc(t.finding)}</div></details>
-        <div class="acts"><button type="button" data-tri="agree" aria-pressed="${t.ruling==="agree"}">Agree</button><button type="button" data-tri="no" aria-pressed="${t.ruling==="no"}">No, keep it open</button>${t.ruling?'<button type="button" data-tri="">Clear</button>':""}</div>
-      </div>`).join("");}).join("");
+    state.triView=state.triView||"open";
+    const nOpen=T.filter(t=>!t.ruling&&!triHeld(t)).length, nDone=T.filter(t=>t.ruling&&!triHeld(t)).length, nHeld=T.filter(t=>triHeld(t)).length;
+    const sub=`<div class="ask-sub" role="group" aria-label="Which items"><button type="button" data-triview="open" aria-pressed="${state.triView==="open"}">Waiting for you (${nOpen})</button><button type="button" data-triview="ruled" aria-pressed="${state.triView==="ruled"}">Answered here (${nDone})</button>${nHeld?`<button type="button" data-triview="held" aria-pressed="${state.triView==="held"}">On lines you approved (${nHeld})</button>`:""}</div>`;
+    const list=triList();
+    if(!list.length) return sub+`<div class="empty">${state.triView==="open"?"Every triage item has your answer. Answered here holds them; each answer can be changed until the Editor acts on it.":"Nothing here."}</div>`;
+    let idx=list.findIndex(t=>t.id===state.triKey); if(idx<0) idx=0;
+    const t=list[idx]; state.triKey=t.id;
+    const nav=`<div class="nav"><button type="button" data-trinav="-1" ${list.length<2?"disabled":""}>◀ Previous</button><span class="pos">${idx+1} of ${list.length} · ${({open:"waiting for you",ruled:"answered here",held:"on lines you approved"})[state.triView]}</span><button type="button" data-trinav="1" ${list.length<2?"disabled":""}>Next ▶</button></div>`;
+    const cutLane=t.lane==="cut"||t.lane==="hold";
+    const x=esc(t.text); let shown=x;
+    if(cutLane&&t.cutFound){const c=esc((t.cut||"").trim()); const i=x.indexOf(c); if(i>=0) shown=x.slice(0,i)+"<mark>"+c+"</mark>"+x.slice(i+c.length);}
+    const held=triHeld(t);
+    const mine=t.myVersion!=null&&t.myVersion!==""?t.myVersion:t.text;
+    const st=held?`<div class="tri-held"><b>On a line you have already approved:</b> ${held.map(h=>`card "${esc(h.t)}"${h.st==="applied"?" (in the book)":""}`).join("; ")}. It does not come to you unless you reopen the line.</div>`
+      :t.ruling?`<div class="pstate ok">${esc(TRIRULED[t.ruling]||t.ruling)} ${esc(fmt(t.ruledAt))}. The Editor acts on it at its next reply. You can change it until then.</div>`
+      :`<div class="pstate">Waiting for your answer. To change the line, edit it in the first box and press Use my version. To tell the Editor what to do, write in the second box and press This is a directive.</div>`;
+    const btn=(v,label,cls)=>`<button type="button" class="${cls||v}" data-tri="${v}" aria-pressed="${t.ruling===v}">${label}</button>`;
+    return `${sub}${nav}<article class="passage tri-card" data-tid="${esc(t.id)}">
+      <h2 class="ptitle">Ch ${String(t.chapter).padStart(2,"0")} · line ${esc(t.line||"")} · ${esc(t.src||"")}<span class="badge ${t.ruling?"done":"wait"}">${t.ruling?"Answered":"Waiting for you"}</span></h2>
+      <p class="tri-lede"><b>${esc(TRILANE[t.lane]||t.lane)}.</b> ${esc(TRILEDE[t.lane]||"")}</p>
+      <div class="nbl hl">In the book now · Ch${String(t.chapter).padStart(2,"0")}/L${esc(t.line||"")}</div><blockquote class="text">${shown}</blockquote>
+      ${cutLane&&!t.cutFound&&t.cut?`<p class="dep"><b>What comes out</b>${esc(t.cut)}</p>`:""}
+      <p class="dep"><b>Why</b>${esc(t.reason)}</p>
+      <details class="more"><summary>What was filed</summary><div class="nbt">${esc(t.finding)}</div></details>
+      ${held?st:`
+      <label class="ed" for="trimine-${esc(t.id)}">Your version of the line · you can edit this<textarea id="trimine-${esc(t.id)}" data-trimine rows="${Math.min(12,Math.max(3,Math.ceil(String(mine).length/80)))}" class="${t.myVersion&&t.myVersion!==t.text?"changed":""}">${esc(mine)}</textarea></label>
+      <label class="ed" for="trinote-${esc(t.id)}">Your words to the Editor${t.notedAt?` · saved ${esc(fmt(t.notedAt))}`:""}<textarea id="trinote-${esc(t.id)}" data-trinote rows="3" class="note" placeholder="An instruction, a question, or a comment">${esc(t.note||"")}</textarea></label>
+      ${st}
+      <div class="actions">${btn("agree","Agree","ok")}${btn("mine","Use my version","go")}${btn("directive","This is a directive","send")}${btn("no","No, keep it open","no")}${t.ruling?'<button type="button" class="clear" data-tri="">Clear my answer</button>':""}</div>`}
+    </article>${nav}`;
   }
   // ASKS — one card per open row of Fact Check/Asks.md (tools/dashboard-sync.py loads them; the author's press goes back into the file).
   function asksList(){return state.asks.filter(a=>state.askView==="answered"?!!a.answer:!a.answer);}
@@ -407,12 +485,14 @@ ${p.noteless?"":`<label class="ed">${esc(p.noteLabel||"Proposed footnote")} · y
     </article>${nav}`;
   }
   // BACK-FILL — works the footnotes cite with no logged read (tools/dashboard-sync.py build), in the chapters in the workflow.
-  const BF={notondrive:{t:"Not in the library",lede:"Cited in the book, and the library index (tools/have.sh) holds no file of this title. Get it, approve citing it unread, or skip it for now.",acts:[["get","I'll get it"],["exception","Approve citing it unread"],["skip","Skip for now"]]},
-            unread:{t:"In the library, no read logged",lede:"The file is in the library and no Claims row names a reader. Back-fill sends it to the Fact-checker to read and log; nothing in the book changes.",acts:[["backfill","Back-fill: read and log it"],["skip","Skip for now"]]}};
+  // The author's rule: the point of scanning the footnotes for unread citations is to read them. A work in the library
+  // goes to the Fact-checker's reading queue (Fact Check/Reading Queue.md) and never to this view. Only a work the
+  // library cannot produce comes here, as "I cannot find it. Can you get it?"
+  const BF={notondrive:{t:"I cannot find these. Can you get them?",lede:"Each work below is cited in the book, and the library index (tools/have.sh) holds no copy of it. The Fact-checker searches again; a work it finds leaves this list and goes to its reading queue. Press I'll get it, or Approve citing it unread.",acts:[["get","I'll get it"],["exception","Approve citing it unread"]]}};
   const BFLABEL={get:"You'll get it",exception:"Approved to cite unread",skip:"Skipped for now",backfill:"Back-fill"};
   function backfillHTML(){
-    const B=state.backlog; if(!B.length) return '<div class="empty">No back-fill items are loaded yet. They appear here once Claude loads them from check-read.sh.</div>';
-    return `<p class="tri-lede">${B.length} works the footnotes in ${esc(workflowLabel())} cite with no logged read. Nothing in the book is removed from this page. Each press goes to the Fact-checker's back-fill queue (Fact Check/Back-fill Queue.md) at Claude's next reply.</p>`+["notondrive","unread"].map(k=>{
+    const B=state.backlog.filter(b=>b.lane==="notondrive"); if(!B.length) return '<div class="empty">Nothing here: every work the book cites is in the library. The Fact-checker reads the unread ones from its reading queue.</div>';
+    return `<p class="tri-lede">Nothing in the book is removed from this page. Each press goes to the Fact-checker (Fact Check/Back-fill Queue.md) at Claude's next reply.</p>`+["notondrive"].map(k=>{
       const items=B.filter(b=>b.lane===k), left=items.filter(b=>!b.action), shown=items.slice(0,state.bfShow[k]);
       const all=k==="unread"&&left.length?`<button type="button" class="tri-all" data-bf-all="${k}">Back-fill the rest of this lane (${left.length})</button>`:"";
       return `<h2 class="tri-lane">${BF[k].t} (${items.length}${left.length?`, ${left.length} unmarked`:""})</h2><p class="tri-lede">${BF[k].lede}</p>${all}`+shown.map(b=>`<div class="tri ${b.action==="skip"?"":b.action?"agree":""}" data-bid="${esc(b.id)}">
@@ -460,6 +540,18 @@ ${p.noteless?"":`<label class="ed">${esc(p.noteLabel||"Proposed footnote")} · y
     if(!b||(b.note||"")===v) return;
     try{await state.db.doc("backlog/"+id).update({note:v}); setStatus("Note saved.");}catch(err){setStatus("That note didn't save. Click into it and out again to retry.",true);}
   });
+  // TRIAGE NOTES. Each triage item has a note box; the author's words are saved on the item (note, notedAt) and in a
+  // press record, which the Editor reads at each reply.
+  listEl.addEventListener("focusout",async e=>{
+    const t=e.target; if(!t.matches("textarea[data-trinote]")||!state.db) return;
+    const id=t.closest(".tri-card").dataset.tid, it=state.triage.find(x=>x.id===id), v=t.value.trim();
+    if(!it||(it.note||"")===v) return;
+    const now=new Date().toISOString();
+    try{await state.db.doc("triage/"+id).update({note:v,notedAt:v?now:""});
+      logPress(id,{title:`Triage Ch ${String(it.chapter).padStart(2,"0")} line ${it.line||""} · ${it.src||""}`},"triage-note","Note",v?"saved":"cleared",v);
+      setStatus("Note saved. The Editor reads it at its next reply.");}
+    catch(err){setStatus("That note didn't save ("+(err&&err.code||"error")+"). Click into it and out again to retry.",true);}
+  });
   // THE NOTE GATE. The author's rule: every card's note is checked before it reaches the author.
   // tools/check-card-notes.py checks a card's footnote and the result is stored on the card as
   // noteCheck {ok, at, text, findings}. A card whose footnote failed, or whose text changed after the
@@ -467,6 +559,18 @@ ${p.noteless?"":`<label class="ed">${esc(p.noteLabel||"Proposed footnote")} · y
   // here: it shows under "With Claude", never under "Waiting for you", and it has no Approve button.
   // The gate time is config.noteGateFrom (see PAGE_DEFAULTS at the top of this script).
   const NOTESEG=/(^|\n\n\u2042\n\n)\[\^[A-Za-z0-9_\-]+\]:/;
+  // THE PROSE GATE. The author's rule: every proposal goes through the neurolinguistic-prose skill before it reaches
+  // the author. tools/prose.py records each audit against the exact text audited (prose.audited); the card holds
+  // the result as proseCheck, written by `tools/prose.py --card/--record-card --patch-dir`. A card whose text the
+  // author would approve has no ok proseCheck for that exact text shows under "With Claude", with no Approve button.
+  const proseText=p=>{const para=p.reviewedPara||p.proposedPara||"", note=p.noteless?"":(p.reviewedNote||p.proposedNote||""); return para+(note.trim()?"\n\n"+note:"");};
+  function proseHeld(p){
+    if(!p||p.status==="approved"||p.status==="applied") return null;
+    const t=proseText(p); if(!t.trim()) return null;
+    const pc=p.proseCheck;
+    if(pc&&pc.ok&&pc.text===t) return null;
+    return {why:pc&&pc.text!==t?"stale":"unrun",at:pc&&pc.at||""};
+  }
   function noteHeld(p){
     if(!p||p.status==="approved"||p.status==="applied") return null;
     const t=p.reviewedPara||p.proposedPara||"";
@@ -484,8 +588,8 @@ ${p.noteless?"":`<label class="ed">${esc(p.noteLabel||"Proposed footnote")} · y
   // or applied card already changed, or when the author pressed Approve on this card and a later version was
   // written over that approval. The page works this out from the cards and presses it loads, so a card the
   // Editor writes without running tools/check-card-closed.py is still held. The tool's stored closedCheck adds
-  // the author's rulings from the event log once the author has accepted a sample of it. The author's own
-  // words reopening the line (a decision.recorded hash in reopenedBy, verified by the tool) are the one way past.
+  // the author's rulings from the event log once the author has accepted a sample of it. The ways past are the
+  // author's own: a decision.recorded hash in reopenedBy, or a Reopen press in the Reopen? lane.
   const CL_BID=/(?:\bblock\s+|\bb:)([0-9a-f]{6})\b/g, CL_SLUG=/\[\^([A-Za-z0-9_\-]+)\]/g, CL_DEF=/^\s*\[\^([A-Za-z0-9_\-]+)\]:/;
   const CL_INSERT=/goes? after|go after|^\s*after\b|new lines? go|between L\d+/i;
   const clNorm=s=>String(s||"").replace(/<!--\s*b:[a-z0-9]{6}\s*-->/g,"").replace(/\s+/g," ").trim();
@@ -519,6 +623,7 @@ ${p.noteless?"":`<label class="ed">${esc(p.noteLabel||"Proposed footnote")} · y
     if(cfg().outOfWorkflow.includes(clCh(p.chapter||p.title))) return null;
     const cc=p.closedCheck, t=p.reviewedPara||p.proposedPara||"";
     if(p.reopenedBy&&cc&&cc.ok&&cc.reopenedBy===p.reopenedBy&&cc.text===t) return null;
+    if(p.lineReopenedAt&&p.lineReopenText===t) return null;
     const ix=clIndex(), found=[];
     const pr=ix.pressed.get(g); if(pr) found.push({where:p.where||"",why:`you pressed Approve on this card ${fmt(pr.at)}; this is a later version written over that approval`});
     clKeys(p,false).forEach((l,k)=>{(ix.keys.get(k)||[]).forEach(c=>{ if(c.g===g) return;
@@ -526,6 +631,18 @@ ${p.noteless?"":`<label class="ed">${esc(p.noteLabel||"Proposed footnote")} · y
     if(cc&&!cc.ok&&cc.text===t) (cc.findings||[]).forEach(f=>found.push(f));
     if(!found.length) return null;
     const seen=new Set(); return {findings:found.filter(f=>{const k=f.why+"|"+f.where; if(seen.has(k)) return false; seen.add(k); return true;})};
+  }
+  // THE REOPEN? LANE. A finding on a line the author approved reaches the author as a whole card in the "Reopen?"
+  // lane, where the author's press reopens the line. Reopen this line saves lineReopenedAt, lineReopenText (the text
+  // the author saw) and the author's words; the card then leaves the lane for Waiting for you. A new version written
+  // over it holds it again. Keep it closed saves lineKeptAt; the card leaves the lane and the Editor withdraws it.
+  function lineKept(p){ const t=p.reviewedPara||p.proposedPara||""; return !!(p.lineKeptAt&&p.lineKeptText===t); }
+  function triHeld(t){
+    if(t.lane!=="hold") return null;
+    const ix=clIndex(), ch=Number(t.chapter), keys=["t:"+clNorm(t.text)];
+    const def=String(t.text||"").match(CL_DEF); if(def) keys.push("n:"+ch+":"+def[1]);
+    const hits=[]; keys.forEach(k=>(ix.keys.get(k)||[]).forEach(c=>{ if(!hits.some(h=>h.g===c.g)) hits.push(c);}));
+    return hits.length?hits:null;
   }
   function checkedAfterSend(p){return !!(p.submittedAt&&p.reviewedAt&&p.reviewedAt>p.submittedAt);}
   function readyList(){
@@ -543,70 +660,126 @@ ${p.noteless?"":`<label class="ed">${esc(p.noteLabel||"Proposed footnote")} · y
       fresh.push({g,t:p.title||g,at:p.reviewedAt||""});
     }
     fresh.sort((a,b)=>a.at<b.at?1:-1);
-    const el=$("#ready"), n=out.length+fresh.length, prev=state.readyN==null?n:state.readyN;
+    const el=$("#ready"), n=out.length+fresh.length, prev=(state.readyN==null||!state.props.size)?n:state.readyN;
+    state.desk=Object.assign(state.desk||{},{ready:out.length,fresh:fresh.length});
     el.innerHTML=(out.length?`<span class="rb-head">Back from Claude, ready for you to approve: ${out.length}</span><button type="button" class="go" data-v="ready">Go through them one by one ▶</button>`+out.map(x=>`<button type="button" data-jump="${esc(x.g)}" data-view="ready">${esc(x.t)}</button>`).join(""):"")
       +(fresh.length?`<span class="rb-head"${out.length?' style="margin-top:8px"':''}>New from Claude, for your ruling: ${fresh.length}</span>`+fresh.map(x=>`<button type="button" data-jump="${esc(x.g)}" data-view="todo">${esc(x.t)}</button>`).join(""):"");
-    if(n>prev){el.classList.remove("pulse"); void el.offsetWidth; el.classList.add("pulse");}
-    state.readyN=n;
+    if(n>prev){const dk=$("#desk"); [el,dk].forEach(x=>{x.classList.remove("pulse"); void x.offsetWidth; x.classList.add("pulse");});}
+    state.readyN=state.props.size?n:null;
     const sent=[...state.props.keys()].filter(g=>stage(g)==="sent"||stage(g)==="held").length;
     $("#n-ready").textContent=n?`(${n})`:""; $("#n-sent").textContent=sent?`(${sent})`:"";
     document.title=(n?`(${n} ready) `:"")+"Source Rulings";
   }
-  async function logPress(g,p,a,label,result,reason){
+  async function logPress(g,p,a,label,result,reason,extra){
     if(!state.db) return;
     const at=new Date().toISOString();
-    try{await state.db.doc("presses/"+at.replace(/[:.]/g,"-")+"_"+g+"_"+a).set({card:g,title:(p&&p.title)||g,button:label,action:a,at,result,reason:reason||""});}catch(e){}
+    try{await state.db.doc("presses/"+at.replace(/[:.]/g,"-")+"_"+g+"_"+a).set(Object.assign({card:g,title:(p&&p.title)||g,button:label,action:a,at,result,reason:reason||""},extra||{}));}catch(e){}
   }
   function unread(){
     const out=[];
     for(const [g,p] of state.props){
-      const ev=[["approvedAt","Approved"],["submittedAt","Sent for checking"],["editedAt","Edited"],["reopenedAt","Reopened"],["withdrawnAt","Approval withdrawn"]].filter(([k])=>p[k]).sort((a,b)=>p[b[0]]>p[a[0]]?1:-1);
+      const ev=[["approvedAt","Approved"],["submittedAt","Sent for checking"],["editedAt","Edited"],["reopenedAt","Reopened"],["withdrawnAt","Approval withdrawn"],["lineReopenedAt","Line reopened"],["lineKeptAt","Line kept closed"]].filter(([k])=>p[k]).sort((a,b)=>p[b[0]]>p[a[0]]?1:-1);
       if(!ev.length) continue;
       const [k,label]=ev[0], at=p[k];
       if(at>(p.claudeReadAt||"")){const r=state.rows.find(x=>x.group===g); out.push({g,t:p.title||(r&&r.gtitle)||g,label,at});}
     }
     out.sort((a,b)=>a.at<b.at?1:-1);
+    state.desk=Object.assign(state.desk||{},{unread:out.length});
     $("#unread").innerHTML=out.length?`<span class="ulbl">Not yet read by Claude (${out.length}):</span>`+out.map(x=>`<button type="button" data-jump="${esc(x.g)}">${esc(x.t)} · ${esc(x.label)} ${esc(fmt(x.at))}</button>`).join(""):"";
   }
+  // NOTHING THE AUTHOR TYPES IS LOST TO A REDRAW. Each write to the page's database, from any chat, and each
+  // reconnect after the tab sat idle, calls render(), which rebuilds the card from the database. So every keystroke
+  // in every box is kept as a draft in this browser (key: the card or item, the box, the segment), every render puts
+  // each draft back into its box and puts the cursor back where it was, and a card holding a draft says "Unsaved
+  // draft". A draft clears when the saved text equals it, or when the author throws the edits away.
+  const DRAFTS_KEY="sr-drafts";
+  state.drafts=(()=>{try{const d=JSON.parse(localStorage.getItem(DRAFTS_KEY)||"{}"), old=Date.now()-14*864e5; for(const k in d) if(!(d[k]&&d[k].at>old)) delete d[k]; return d;}catch(e){return {};}})();
+  const saveDrafts=()=>{try{localStorage.setItem(DRAFTS_KEY,JSON.stringify(state.drafts));}catch(e){}};
+  function draftKey(el){
+    if(!el||el.tagName!=="TEXTAREA") return "";
+    const own=el.closest("[data-g]"), tri=el.closest("[data-tid]"), bf=el.closest("[data-bid]"), src=el.closest(".src[data-id]");
+    const owner=own?"g:"+own.dataset.g:tri?"t:"+tri.dataset.tid:bf?"b:"+bf.dataset.bid:src?"s:"+src.dataset.id:"";
+    const field=[...el.attributes].filter(a=>a.name.startsWith("data-")).map(a=>a.name+(a.value?"="+a.value:"")).sort().join(",");
+    if(!owner&&!el.id) return "";
+    return [owner||("id:"+el.id),field].join("|");
+  }
+  function dropDrafts(prefix){ let n=0; for(const k in state.drafts) if(k.startsWith(prefix)){ delete state.drafts[k]; n++; } if(n) saveDrafts(); }
+  document.addEventListener("input",e=>{ const el=e.target, k=draftKey(el); if(!k) return;
+    state.drafts[k]={v:el.value,at:Date.now()}; saveDrafts(); markDraft(el); },true);
+  function markDraft(el){
+    el.classList.add("drafty");
+    const art=el.closest("article")||el.closest(".tri")||el.closest(".src"); if(!art||art.querySelector(".draft-badge")) return;
+    const b=document.createElement("span"); b.className="draft-badge"; b.textContent="Unsaved draft";
+    const h=art.querySelector("h2,.bf-title,.shead"); (h||art).appendChild(b);
+  }
   function render(){
-    tally(); unread(); readyList(); counts(); openWork();
-    const tleft=state.triage.filter(t=>!t.ruling).length; $("#n-triage").textContent=state.triage.length?`(${tleft})`:"";
+    const ae=document.activeElement, fk=draftKey(ae), sel=fk?{s:ae.selectionStart,e:ae.selectionEnd,top:ae.scrollTop}:null, y=window.scrollY;
+    renderInner();
+    let changed=false;
+    listEl.querySelectorAll("textarea").forEach(el=>{ const k=draftKey(el), d=state.drafts[k]; if(!d) return;
+      if(d.v===el.value){ delete state.drafts[k]; changed=true; return; }
+      if(el.readOnly||el.disabled) return;
+      el.value=d.v; markDraft(el);
+      if(el.dataset.pf){ const g=el.closest("[data-g]"), q=g&&state.props.get(g.dataset.g); if(q){ const rv=el.dataset.seg!=null?(segs(q.reviewedPara)[+el.dataset.seg]||""):(el.dataset.pf==="proposedPara"?q.reviewedPara:q.reviewedNote); el.classList.toggle("changed",el.value!==rv);} }
+    });
+    if(changed) saveDrafts();
+    if(fk){ const el=[...listEl.querySelectorAll("textarea")].find(x=>draftKey(x)===fk);
+      if(el){ try{el.focus({preventScroll:true}); el.setSelectionRange(sel.s,sel.e); el.scrollTop=sel.top;}catch(e){} window.scrollTo(0,y); } }
+  }
+  function renderInner(){
+    unread(); readyList(); counts(); openWork(); deskSum();
+    const tleft=state.triage.filter(t=>!t.ruling&&!triHeld(t)).length; $("#n-triage").textContent=state.triage.length?`(${tleft})`:"";
     const aleft=state.asks.filter(a=>!a.answer).length; $("#n-asks").textContent=state.asks.length?`(${aleft})`:"";
-    const bleft=state.backlog.filter(b=>!b.action).length; $("#n-backfill").textContent=state.backlog.length?`(${bleft})`:"";
+    const bleft=state.backlog.filter(b=>b.lane==="notondrive"&&!b.action).length; $("#n-backfill").textContent=bleft?`(${bleft})`:"";
     if(state.view==="triage"){document.querySelectorAll("#filters button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.v===state.view))); listEl.innerHTML=triageHTML(); return;}
     if(state.view==="asks"||state.view==="backfill"){document.querySelectorAll("#filters button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.v===state.view))); listEl.innerHTML=state.view==="asks"?asksHTML():backfillHTML(); return;}
     document.querySelectorAll("#filters button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.v===state.view)));
     if(!state.rows.length&&!state.props.size){listEl.innerHTML='<div class="empty">No passages are in the store yet.</div>';return;}
     const list=visibleCards();
-    if(!list.length){listEl.innerHTML=`<div class="empty">${({todo:"Nothing is waiting for you. Approved, going in and In the book hold everything you have decided.",ready:"Nothing is back from Claude right now. When Claude has checked something you sent, it appears here and in the green box at the top.",sent:"Nothing is with Claude for checking.",approved:"Nothing is waiting to go into a chapter.",inbook:"Nothing is in the book yet."})[state.view]||"Nothing here."}</div>`;return;}
+    if(!list.length){const go=[["ready","Ready for you","n-ready"],["sent","With Claude","n-sent"],["todo","Waiting for you","n-todo"],["reopen","Reopen?","n-reopen"],["triage","Triage","n-triage"],["asks","Asks","n-asks"],["backfill","Back-fill","n-backfill"]].filter(([v,,id])=>v!==state.view&&$("#"+id).textContent).map(([v,t,id])=>`<button type="button" data-goview="${v}">${t} ${$("#"+id).textContent}</button>`).join("");
+      listEl.innerHTML=`<div class="empty">${({todo:"Nothing is waiting for you. Approved, going in and In the book hold everything you have decided.",ready:"Nothing is back from Claude right now. When Claude has checked something you sent, it appears here and in the green box at the top.",sent:"Nothing is with Claude for checking.",approved:"Nothing is waiting to go into a chapter.",inbook:"Nothing is in the book yet."})[state.view]||"Nothing here."}${go?`<div class="ask-sub" style="margin-top:14px">Next: ${go}</div>`:""}</div>`;return;}
     let idx=list.findIndex(c=>c.key===state.key); if(idx<0) idx=0;
     const c=list[idx]; state.key=c.key; try{localStorage.setItem("sr-key",c.key);}catch(e){}
-    const nav=`<div class="nav"><button type="button" data-nav="-1" ${list.length<2?"disabled":""}>◀ Previous</button><span class="pos">${idx+1} of ${list.length} · ${({todo:"waiting for you",approved:"approved, going in",inbook:"in the book",all:"all",ready:"ready for you to approve",sent:"with Claude for checking"})[state.view]||"all"}${idx===list.length-1&&list.length>1?" · last one, Next goes back to the first":""}</span><button type="button" data-nav="1" ${list.length<2?"disabled":""}>Next ▶</button></div>`;
+    // A card you just ruled on stays on screen so you see the result; when it was the last one in this view,
+    // Next still works and takes you to what is left.
+    const pinned=state.flash&&state.flash.g===c.key&&!(state.view==="all"||(state.view==="ready"?stage(c.key)==="ready":inView(c,state.view)));
+    const others=list.filter(x=>x.key!==c.key).length;
+    if(pinned&&!others){
+      const nav=`<div class="nav"><span class="pos">Nothing else is in this view.</span><button type="button" data-nav="1">Next ▶</button></div>`;
+      listEl.innerHTML=`${nav}<article class="passage"><h2 class="ptitle">${esc(c.title)}</h2>${c.body}</article>${nav}`;
+      return;
+    }
+    const nav=`<div class="nav"><button type="button" data-nav="-1" ${list.length<2?"disabled":""}>◀ Previous</button><span class="pos">${idx+1} of ${list.length} · ${({todo:"waiting for you",approved:"approved, going in",inbook:"in the book",all:"all",ready:"ready for you to approve",sent:"with Claude for checking",reopen:"lines you approved before"})[state.view]||"all"}${idx===list.length-1&&list.length>1?" · last one, Next goes back to the first":""}</span><button type="button" data-nav="1" ${list.length<2?"disabled":""}>Next ▶</button></div>`;
     listEl.innerHTML=`${nav}<article class="passage">
-      <h2 class="ptitle">${esc(c.title)}${(()=>{const st=stage(c.key); const m={closed:["sent","Held: you already approved this line"],held:["sent","Held by the note check"],ready:["ready","Ready for you to approve"],sent:["sent","With Claude for checking"],approved:["sent","Approved, going in"],applied:["done","In the book"]}[st]; return m?`<span class="badge ${m[0]}">${m[1]}</span>`:`<span class="badge ${c.done?"done":"wait"}">${c.done?"Decided":"Waiting for you"}</span>`;})()}</h2>
+      <h2 class="ptitle">${esc(c.title)}${(()=>{const st=stage(c.key); const m={closed:["sent","Held: you already approved this line"],held:["sent",noteHeld(state.props.get(c.key))?"Held by the note check":"With Claude: prose check not run"],ready:["ready","Ready for you to approve"],sent:["sent","With Claude for checking"],approved:["sent","Approved, going in"],applied:["done","In the book"]}[st]; return m?`<span class="badge ${m[0]}">${m[1]}</span>`:`<span class="badge ${c.done?"done":"wait"}">${c.done?"Decided":"Waiting for you"}</span>`;})()}</h2>
       ${c.body}
     </article>${nav}`;
   }
+  try{ if(localStorage.getItem("sr-desk")==="open") $("#desk").open=true; }catch(e){}
+  $("#desk").addEventListener("toggle",()=>{ try{localStorage.setItem("sr-desk",$("#desk").open?"open":"closed");}catch(e){} deskSum(); });
+  const closeDesk=()=>{ $("#desk").open=false; };
   $("#ready").addEventListener("click",e=>{
-    const v=e.target.closest("button[data-v]"); if(v){state.view="ready"; state.key=null; render(); window.scrollTo(0,0); return;}
+    const v=e.target.closest("button[data-v]"); if(v){state.view="ready"; state.key=null; closeDesk(); render(); window.scrollTo(0,0); return;}
     const b=e.target.closest("button[data-jump]"); if(!b) return;
-    state.view=b.dataset.view||"ready"; state.key=b.dataset.jump; render(); window.scrollTo(0,0);
+    state.view=b.dataset.view||"ready"; state.key=b.dataset.jump; closeDesk(); render(); window.scrollTo(0,0);
   });
   $("#unread").addEventListener("click",e=>{
     const b=e.target.closest("button[data-jump]"); if(!b) return;
-    state.view="all"; state.key=b.dataset.jump; render(); window.scrollTo(0,0);
+    state.view="all"; state.key=b.dataset.jump; closeDesk(); render(); window.scrollTo(0,0);
   });
   listEl.addEventListener("click",e=>{
+    const g=e.target.closest("button[data-goview]"); if(g){state.view=g.dataset.goview; state.key=null; state.flash=null; try{localStorage.setItem("sr-view",state.view);}catch(err){} render(); window.scrollTo({top:0}); return;}
     const b=e.target.closest("button[data-nav]"); if(!b) return;
     const list=visibleCards(); let idx=list.findIndex(c=>c.key===state.key);
     idx=(idx+Number(b.dataset.nav)+list.length)%list.length;
     state.key=list[idx].key; state.flash=null;
+    if(list.length===1) state.key=null;
     // after moving, drop the pin on a card that no longer belongs in this view
     render(); window.scrollTo({top:0});
   });
   document.addEventListener("keydown",e=>{
     if(e.target.closest&&e.target.closest("textarea,input")) return;
-    if(e.key==="ArrowRight"||e.key==="ArrowLeft"){const d=e.key==="ArrowRight"?1:-1; const b=listEl.querySelector(`button[data-nav="${d}"]`)||listEl.querySelector(`button[data-asknav="${d}"]`); if(b&&!b.disabled) b.click();}
+    if(e.key==="ArrowRight"||e.key==="ArrowLeft"){const d=e.key==="ArrowRight"?1:-1; const b=listEl.querySelector(`button[data-nav="${d}"]`)||listEl.querySelector(`button[data-asknav="${d}"]`)||listEl.querySelector(`button[data-trinav="${d}"]`); if(b&&!b.disabled) b.click();}
   });
   $("#filters").addEventListener("click",e=>{
     const b=e.target.closest("button[data-v]"); if(!b) return;
@@ -614,23 +787,22 @@ ${p.noteless?"":`<label class="ed">${esc(p.noteLabel||"Proposed footnote")} · y
     render();
   });
   listEl.addEventListener("click",async e=>{
-    const all=e.target.closest("button[data-tri-all]"), one=e.target.closest("button[data-tri]");
-    if(!all&&!one) return;
+    const v=e.target.closest("button[data-triview]"); if(v){state.triView=v.dataset.triview; state.triKey=null; render(); return;}
+    const n=e.target.closest("button[data-trinav]"); if(n){const l=triList(); let i=l.findIndex(t=>t.id===state.triKey); i=(i+Number(n.dataset.trinav)+l.length)%l.length; state.triKey=l[i].id; render(); window.scrollTo({top:0}); return;}
+    const one=e.target.closest("button[data-tri]"); if(!one) return;
     if(!state.db){setStatus("This view can't save. Open the page signed in to claude.ai.",true);return;}
-    const now=new Date().toISOString();
-    try{
-      if(all){ if(all.dataset.armed!=="1"){all.dataset.armed="1"; all.textContent="Press again to agree to every unmarked item in this lane"; return;}
-        const ids=state.triage.filter(t=>t.lane===all.dataset.triAll&&!t.ruling).map(t=>t.id);
-        for(const id of ids) await state.db.doc("triage/"+id).update({ruling:"agree",ruledAt:now});
-        logPress("triage-"+all.dataset.triAll,{title:"Triage lane "+all.dataset.triAll},"triage-lane","Agree to the rest ("+ids.length+")","saved","");
-        setStatus("Saved: "+ids.length+" items agreed.");
-      } else {
-        const id=one.closest(".tri").dataset.tid, v=one.dataset.tri;
-        await state.db.doc("triage/"+id).update({ruling:v,ruledAt:v?now:""});
-        logPress(id,{title:"Triage "+id},"triage",one.textContent.trim(),"saved","");
-        setStatus("Saved.");
-      }
-    }catch(err){setStatus("Not saved ("+(err&&err.code||"error")+"). Press it again.",true);}
+    const card=one.closest(".tri-card"), id=card.dataset.tid, t=state.triage.find(x=>x.id===id); if(!t) return;
+    const act=one.dataset.tri, now=new Date().toISOString();
+    const mine=(card.querySelector("textarea[data-trimine]")||{}).value||"", words=((card.querySelector("textarea[data-trinote]")||{}).value||"").trim();
+    if(act==="mine"&&mine.trim()===String(t.text).trim()){setStatus("Edit the line in the first box first, then press Use my version.",true);return;}
+    if(act==="directive"&&!words){setStatus("Write your directive in the second box first, then press This is a directive.",true);return;}
+    const patch=act===""?{ruling:"",ruledAt:""}:{ruling:act,ruledAt:now,note:words,notedAt:words?now:(t.notedAt||"")};
+    if(act==="mine") patch.myVersion=mine;
+    try{await state.db.doc("triage/"+id).update(patch);
+      logPress(id,{title:`Triage Ch ${String(t.chapter).padStart(2,"0")} line ${t.line||""} · ${t.src||""}`},"triage",one.textContent.trim(),"saved",[act==="mine"?"Author's version: "+mine:"",words?"Author's words: "+words:""].filter(Boolean).join(" | "));
+      setStatus(act===""?"Answer cleared.":"Saved. The Editor acts on it at its next reply.");
+      if(act&&state.triView==="open"){const l=triList().filter(x=>x.id!==id); const i=Math.max(0,triList().findIndex(x=>x.id===id)); state.triKey=l.length?l[Math.min(i,l.length-1)].id:null;}
+    }catch(err){setStatus("Not saved ("+(err&&err.code||"error")+"). Press it again; if it fails twice, reload the page.",true);}
   });
   const busy=new Set();
   listEl.addEventListener("click",async e=>{
@@ -678,11 +850,24 @@ ${p.noteless?"":`<label class="ed">${esc(p.noteLabel||"Proposed footnote")} · y
     let patch;
     if(a==="send") patch={proposedPara:para,proposedNote:note,submittedPara:para,submittedNote:note,status:"submitted",submittedAt:now};
     else if(a==="undo"&&b.dataset.armed!=="1"){b.dataset.armed="1";b.textContent="Press again to throw away your edits";return;}
-    else if(a==="undo") patch={proposedPara:p.reviewedPara,proposedNote:p.reviewedNote,status:"yours"};
+    else if(a==="undo"){ dropDrafts("g:"+g+"|"); patch={proposedPara:p.reviewedPara,proposedNote:p.reviewedNote,status:"yours"}; }
+    else if(a==="approve"&&proseHeld(p)){const why="The prose check has not been run on this text.";state.flash={g,ok:false,msg:"Not approved. "+why};logPress(g,p,a,b.textContent.trim(),"refused",why);render();return;}
     else if(a==="approve"&&closedHeld(g)){const why="You have already approved this line; this card is held.";state.flash={g,ok:false,msg:"Not approved. "+why};logPress(g,p,a,b.textContent.trim(),"refused",why);render();return;}
     else if(a==="approve"){ if(para!==p.reviewedPara||note!==p.reviewedNote){const why="The text in the box differs from the text Claude checked, so this is not approved. Press Send my edits for checking, or Throw away my edits.";state.flash={g,ok:false,msg:"Not approved. "+why};setStatus("Not approved.",true);logPress(g,p,a,b.textContent.trim(),"refused",why);render();return;}
       patch={status:"approved",approvedAt:now}; }
     else if(a==="withdraw") patch={status:"yours",approvedAt:"",withdrawnAt:now};
+    else if(a==="reopenline"||a==="keepclosed"){
+      const words=((box.querySelector("textarea[data-reowords]")||{}).value||"").trim(), seen=p.reviewedPara||p.proposedPara||"";
+      patch=a==="reopenline"?{lineReopenedAt:now,lineReopenText:seen,lineReopenWords:words,lineKeptAt:"",lineKeptText:""}:{lineKeptAt:now,lineKeptText:seen,lineKeepWords:words};
+      b.disabled=true;
+      try{await state.db.doc("proposals/"+g).update(patch);
+        setTimeout(()=>{const q=state.props.get(g)||{}, ok=Object.keys(patch).every(k=>q[k]===patch[k]);
+          state.flash={g,ok,msg:ok?(a==="reopenline"?`Line reopened, saved ${fmt(now)}. The card is now under Waiting for you.`:`Kept closed, saved ${fmt(now)}. The Editor withdraws the card.`):`Not saved. Press "${b.textContent.trim()}" again; if it fails twice, reload the page.`};
+          logPress(g,p,a,b.textContent.trim(),ok?"saved":"not saved",ok?"":"The page did not see the change come back from the store within 1.5 seconds.",{words});
+          if(ok&&a==="reopenline"){state.view="todo"; state.key=g;}
+          setStatus(ok?"Saved.":"Not saved.",!ok); render();},1500);}
+      catch(err){b.disabled=false;logPress(g,p,a,b.textContent.trim(),"failed",(err&&(err.code||err.message))||"error",{words});state.flash={g,ok:false,msg:"Not saved ("+(err&&err.code||"error")+"). Press it again; if it fails twice, reload the page."};setStatus("Not saved.",true);render();}
+      return;}
     else if(a==="reopen") patch={status:"yours",reopenedAt:now,appliedNote:(p.appliedNote||"")+" Reopened "+now.slice(0,10)+"; the chapter still has the applied text until a new version is approved and applied."};
     b.disabled=true;
     const names={approve:"Approved",send:"Sent for checking (not approved yet)",undo:"Your edits thrown away",withdraw:"Approval withdrawn",reopen:"Reopened"};
@@ -698,7 +883,6 @@ ${p.noteless?"":`<label class="ed">${esc(p.noteLabel||"Proposed footnote")} · y
     const db=window.claude&&window.claude.use?await window.claude.use("db"):null;
     if(!db){setStatus("This view can't reach the rulings store. Open the page signed in to claude.ai to rule.",true);listEl.innerHTML='<div class="empty">The passages live in the page\'s database, which this view can\'t open.</div>';return;}
     state.db=db;
-    try{db.collection("config").onSnapshot(snap=>{const d=snap.docs.find(x=>x.id==="page"); state.config=d?d.data():null; state.clIdx=null; applyConfig(); render();},()=>{});}catch(e){}
     db.collection("sources").orderBy("order").onSnapshot(snap=>{
       const ae=document.activeElement, act=ae&&ae.matches&&ae.matches("textarea[data-note]")?ae.id:null, draft=act?ae.value:null;
       const pfd=ae&&ae.matches&&ae.matches("textarea[data-pf]")?{g:ae.closest(".pz").dataset.g,f:ae.dataset.pf,k:ae.dataset.seg,v:ae.value}:null;
@@ -710,10 +894,11 @@ ${p.noteless?"":`<label class="ed">${esc(p.noteLabel||"Proposed footnote")} · y
       if(act){const el=document.getElementById(act); if(el){el.value=draft; el.focus();}}
       if(pfd){const el=document.querySelector(`.pz[data-g="${pfd.g}"] textarea[data-pf="${pfd.f}"]${pfd.k!=null?`[data-seg="${pfd.k}"]`:""}`); if(el){el.value=pfd.v; el.focus();}}
     },err=>setStatus("The live connection to the rulings store dropped ("+(err&&err.code||"error")+"). Reload the page.",true));
-    try{db.collection("triage").orderBy("order").onSnapshot(snap=>{state.triage=snap.docs.map(d=>Object.assign({id:d.id},d.data())); render();},()=>{});}catch(e){}
+    try{db.collection("triage").orderBy("order").onSnapshot(snap=>{const ae=document.activeElement,keep=ae&&ae.matches&&ae.matches("textarea[data-trinote],textarea[data-trimine]")?{id:ae.id,v:ae.value}:null; state.triage=snap.docs.map(d=>Object.assign({id:d.id},d.data())); render(); if(keep){const el=document.getElementById(keep.id); if(el){el.value=keep.v; el.focus();}}},()=>{});}catch(e){}
     try{db.collection("asks").orderBy("order").onSnapshot(snap=>{const ae=document.activeElement,keep=ae&&ae.matches&&ae.matches("textarea[data-askwords]")?{id:ae.id,v:ae.value}:null; state.asks=snap.docs.map(d=>Object.assign({id:d.id},d.data())); render(); if(keep){const el=document.getElementById(keep.id); if(el){el.value=keep.v; el.focus();}}},()=>{});}catch(e){}
     try{db.collection("backlog").orderBy("order").onSnapshot(snap=>{const ae=document.activeElement,keep=ae&&ae.matches&&ae.matches("textarea[data-bfnote]")?{id:ae.id,v:ae.value}:null; state.backlog=snap.docs.map(d=>Object.assign({id:d.id},d.data())); render(); if(keep){const el=document.getElementById(keep.id); if(el){el.value=keep.v; el.focus();}}},()=>{});}catch(e){}
     try{db.collection("presses").onSnapshot(snap=>{state.presses=snap.docs.map(d=>d.data()); state.clIdx=null; render();},()=>{});}catch(e){}
+    try{db.collection("config").onSnapshot(snap=>{const d=snap.docs.find(x=>x.id==="page"); state.config=d?d.data():null; state.clIdx=null; applyConfig(); render();},()=>{});}catch(e){}
     try{db.collection("register").onSnapshot(snap=>{const d=snap.docs.find(x=>x.id==="summary"); state.register=d?d.data():null; render();},()=>{});}catch(e){}
     db.collection("proposals").onSnapshot(snap=>{
       const ae=document.activeElement, pf=ae&&ae.matches&&ae.matches("textarea[data-pf]")?{g:ae.closest(".pz").dataset.g,f:ae.dataset.pf,k:ae.dataset.seg,v:ae.value,s:ae.selectionStart}:null;

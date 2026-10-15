@@ -54,7 +54,7 @@ Each card's `review` answers these, in the author's order (Rules — Editor, "Th
 - **B** — the source, read whole, with the search surface stated, including zero results.
 - **C** — what belongs in the body, asked before touching the note.
 - **D** — redundancy, checked before the proposal and after it.
-- **E** — the neurolinguistic-prose skill on each word the author will read, recorded as a `prose.audited` event.
+- **E** — the neurolinguistic-prose skill on each word the author will read, recorded as a `prose.audited` event by `tools/prose.py --record-card`; the card holds the result as `proseCheck`.
 - **F** — each read logged, including what was not found (`tools/card-log.py`).
 
 ## The review: seven footnote steps

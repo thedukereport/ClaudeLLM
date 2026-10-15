@@ -130,9 +130,18 @@ KINDS = {
 }
 
 
+# ONE FILE PER ISO WEEK. A month of a busy book's log can pass 100 MB, and GitHub refuses a file
+# over 100 MB, so the backup would stop working. "2026-W42" sorts after any month name such as
+# "2026-10", so every reader that reads `sorted(LOGDIR.glob("*.jsonl"))` still reads oldest first,
+# and the hash chain does not depend on file names.
+def logname(ts: datetime) -> str:
+    y, w, _ = ts.isocalendar()
+    return f"{y}-W{w:02d}.jsonl"
+
+
 def _logfile(ts: datetime) -> Path:
     LOGDIR.mkdir(parents=True, exist_ok=True)
-    return LOGDIR / f"{ts:%Y-%m}.jsonl"
+    return LOGDIR / logname(ts)
 
 
 def _last_hash() -> str:

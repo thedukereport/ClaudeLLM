@@ -53,10 +53,13 @@ WHAT IT DOES
     card title and date, or the item and the author's ruling, or the note
     ruling.
 
-    The one way past: the card names in `reopenedBy` the hash of a
-    decision.recorded event of the author's (actor author_actor) dated after
-    every closing it meets. That is the author's own words reopening the line;
-    nothing else is.
+    The ways past, both the author's own act: the card names in `reopenedBy`
+    the hash of a decision.recorded event of the author's (actor author_actor)
+    dated after every closing it meets; or the author pressed "Reopen this
+    line" on the card in the page's "Reopen?" lane, which saves
+    `lineReopenedAt` and `lineReopenText` (the text the author saw), dated
+    after every closing, on a card whose text is still that text. A new
+    version written over that text is held again.
 
 TWO KINDS, AND WHY THE PAGE HOLDS ONLY THE FIRST BY ITSELF
 
@@ -249,6 +252,9 @@ def check_card(cid, card, book, closed):
     if ch is None or ch in OUT_OF_WORKFLOW or card.get("status") in CLOSED_STATUS:
         return None
     reopen = his_reopening(card.get("reopenedBy"))
+    seen_text = card.get("reviewedPara") or card.get("proposedPara") or ""
+    if not reopen and card.get("lineReopenedAt") and card.get("lineReopenText") == seen_text:
+        reopen = {"ts": card["lineReopenedAt"]}   # the author's press in the Reopen? lane
     findings = []
     for b in sorted(card_targets(card, book), key=lambda x: (book.idx[x].line if x in book.idx else 0)):
         why = [r for r in closed.get(b, []) if r["source"] != cid or r["kind"] == "page"]

@@ -145,8 +145,10 @@ def main():
         print(f"  {k:<22}{len(states[k]):>5}")
     print(f"  periodicals, listed separately{len(states['periodical']):>5}")
     print("\nUNREAD means the work is in the library and no Claims record names a")
-    print("reader. Reading it costs minutes. NOT IN LIBRARY is a Sources Wanted")
-    print("entry, once have.sh's further searches have also come back empty.")
+    print("reader. The author's rule: the point of scanning for unread citations is to")
+    print("read them. This list feeds the Fact-checker's reading queue")
+    print("(tools/dashboard-sync.py queue writes Fact Check/Reading Queue.md) and never")
+    print("goes to the author. NOT IN LIBRARY is searched again there first.")
     if "--strict" in sys.argv and (states["UNREAD"] or states["NOT IN LIBRARY"]
                                    or states["NOT SEARCHED"]):
         sys.exit(1)

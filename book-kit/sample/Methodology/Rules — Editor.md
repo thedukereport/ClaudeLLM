@@ -137,7 +137,7 @@ This is the question the note pass exists to ask, and it is asked **first**, bef
 
 ### E — The neurolinguistic-prose skill, on each word the author will read.
 
-All of its principles, named, with the subject-scan table produced before any prose-change edit. The audit is recorded as a `prose.audited` event hashed to the exact text, so a rewrite makes its own audit stale.
+All of its principles, named, with the subject-scan table produced before any prose-change edit. The audit is recorded as a `prose.audited` event hashed to the exact text, so a rewrite makes its own audit stale: write the fourteen principles' findings to a file and run `tools/prose.py --record-card <card file> --findings <file> --patch-dir <dir>`, then merge the `proseCheck` into the card. The page holds a card with no ok `proseCheck` for the text the author would approve under "With Claude", with no Approve button. `tools/prose.py` alone lists the open cards with no audit of their current text.
 
 ### F — Log it, including what you did not find.
 

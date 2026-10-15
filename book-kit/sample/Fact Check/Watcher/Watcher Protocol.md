@@ -41,7 +41,7 @@ Everything else in the vault is read-only to the Watcher: chapters, appendices, 
 ### 0. Orient — read, in full, from disk
 
 1. `Methodology/Standing Rules.md` — the whole file; then `Methodology/Rules — Managing Editor.md`, and the role file of each role whose work it checks (`Methodology/Rules — <Role>.md`). The core's first section governs everything here: **a match is a coordinate; only a read decides.** The word lists are in `Methodology/Word Lists.md`.
-2. `Methodology/Roles.md` — who does which job, and the author's two queues.
+2. `Methodology/Roles.md` — who does which job, and the author's one queue.
 3. Each role file in `Handoffs/`: `Fact-checker.md`, `Editor.md`, `Production.md`, `Managing Editor.md`, `Systems.md`. The first line of each gives that role's `WORKING:` line. A hand-off file that does not exist yet goes in the run summary.
 4. `Methodology/Anomalies and Contingencies.md` — the faults already met, and what to do next time.
 5. `Fact Check/Asks.md`, `Fact Check/Findings Register.md`, `Fact Check/Directive Register.md` and `Fact Check/Locks.md`.

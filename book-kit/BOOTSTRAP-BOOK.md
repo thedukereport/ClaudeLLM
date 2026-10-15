@@ -51,7 +51,7 @@ Follow `book-kit/page/README.md`: publish `page/source-rulings.html` as an artif
 
 ## 6. The chats
 
-Help them make one Claude project for the book, with the vault folder attached, and one chat per role, each named for its role. Give them each role's "Open with" line from `Methodology/Roles.md` to paste as that chat's first message. Explain the two queues: the review page (cards) and `Fact Check/Asks.md` (questions only they can answer). They never copy messages between chats; the chats pass work through `Handoffs/`.
+Help them make one Claude project for the book, with the vault folder attached, and one chat per role, each named for its role. In `Chat Prompts.md`, replace `<VAULT>` with the vault's full path and `<PAGE URL>` with the review page's link (show them the change before you save it). Give them each role's **Start** prompt from that file to paste as the chat's first message, and walk them through `book-kit/how-to/07 When a chat gets long or compresses.md`: **Recover** after a compaction, **Close** to stop a chat cleanly, and a new chat with **Start** when a chat repeats a corrected mistake, forgets a ruling, or compacts again within minutes. Explain the one queue: the review page, with its cards and its Asks tab (questions only they can answer, kept on file in `Fact Check/Asks.md`). They never copy messages between chats; the chats pass work through `Handoffs/`.
 
 ## 7. Scheduled tasks (optional, later)
 

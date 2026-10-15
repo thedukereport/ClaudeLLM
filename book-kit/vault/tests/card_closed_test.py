@@ -14,6 +14,7 @@ On a copy of the sample vault and its page snapshot. Requires:
   6. a chapter in book.toml [workflow] out_of_workflow is skipped;
   7. --card checks one card file against the snapshot.
 """
+import datetime
 import json
 import os
 import subprocess
@@ -106,6 +107,20 @@ with T.sample_copy() as v:
     _, got = results(v)
     if T.ON_CLOSED in got:
         bad.append("a card in an out-of-workflow chapter was checked")
+
+# The author's "Reopen this line" press on the page passes the card for the text the author saw, and only that text.
+with T.sample_copy() as v:
+    c = T.card_path(v, T.ON_CLOSED)
+    d = json.loads(c.read_text(encoding="utf-8"))
+    seen = d.get("reviewedPara") or d.get("proposedPara") or ""
+    # A reopen counts only after the approval that closed the line, so the press is stamped now.
+    NOW = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    T.edit_card(v, T.ON_CLOSED, lineReopenedAt=NOW, lineReopenText=seen)
+    if T.run(v, "check-card-closed.py", "--card", c).returncode != 0:
+        bad.append("a card the author reopened with the page's press is still held")
+    T.edit_card(v, T.ON_CLOSED, proposedPara=seen + " One sentence more.", reviewedPara=seen + " One sentence more.")
+    if T.run(v, "check-card-closed.py", "--card", c).returncode != 1:
+        bad.append("a version written over the author's reopen press was not held again")
 
 T.finish("check-card-closed", bad,
          "closed lines: the card on the applied paragraph is held and names the applied card; open lines pass; "

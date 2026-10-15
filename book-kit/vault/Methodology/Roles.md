@@ -8,19 +8,20 @@ The book's title, the author's name, the paths, the library and the review page'
 
 ---
 
-## Two queues for the author, and only two
+## One queue for the author
 
-1. **The Source Rulings page** (its address is `[page] url` in `book.toml`): cards, each with the current text and the proposed text in full. The author approves, edits or sends back.
-2. **`Fact Check/Asks.md`**: questions only the author can answer, each with what happens if the author says nothing.
+The author's rule: *"We need to have a single queue."*
 
-Nothing else asks for the author's ruling. The Watcher's directives, the Findings Register, the Ship Triage lanes and the hand-off files feed these two; they never wait on the author directly. A ruling on process (a tool sample, a skill change, deleting a scheduled task) is an ask in `Asks.md` like any other.
+**The Source Rulings page** (its address is `[page] url` in `book.toml`) is the one place the author rules. Its cards show the current text and the proposed text in full; the author approves, edits or sends back. Its **Asks** tab shows `Fact Check/Asks.md`: questions only the author can answer, each with what happens if the author says nothing. `Fact Check/Asks.md` stays the file of record, and a new ask goes there first; `tools/dashboard-sync.py build` loads it onto the tab.
+
+Nothing else asks for the author's ruling. The Watcher's directives, the Findings Register, the Ship Triage lanes, the Fact-checker's reading queue and the hand-off files feed the page; they never wait on the author directly. A ruling on process (a tool sample, a skill change, deleting a scheduled task) is an ask in `Asks.md` like any other.
 
 ## The six roles
 
 | role | chat | writes ONLY to | starts each session by reading | hands off to |
 |---|---|---|---|---|
 | Author | the author (a person) | the book, through rulings | — | everyone |
-| Fact-checker | **Fact-checker**, plus the nightly agent and any reading agents it starts | `Fact Check/` except `Watcher/` and the Ship Triage register: ledgers, `Claims/`, Findings Register, the rulings registers, the agent's run log and state file, the Back-fill Queue; `Handoffs/Fact-checker.md` | Standing Rules · `Methodology/Rules — Fact-checker.md` · `Handoffs/Fact-checker.md` · `Handoffs/Editor.md` · `Fact Check/Asks.md` | Editor |
+| Fact-checker | **Fact-checker**, plus the nightly agent and any reading agents it starts | `Fact Check/` except `Watcher/` and the Ship Triage register: ledgers, `Claims/`, Findings Register, the rulings registers, the agent's run log and state file, the Back-fill Queue, the Reading Queue; `Handoffs/Fact-checker.md` | Standing Rules · `Methodology/Rules — Fact-checker.md` · `Handoffs/Fact-checker.md` · `Handoffs/Editor.md` · `Fact Check/Asks.md` | Editor |
 | Editor | **Editor** | the Source Rulings page (cards), `Fact Check/Ship Triage.md`, `Handoffs/Editor.md` | Standing Rules · `Methodology/Rules — Editor.md` · `Handoffs/Editor.md` · the page's `presses` and `proposals` · the author's note rulings (`note.ruled` events) · the chapter, end to end | Author, then Production |
 | Production | **Production** | `Chapters/`, `Appendices/`, `Book Structure.md`, `Punch List.md`, `Project State.md`, `Fact Check/Locks.md` (through `tools/lock.py`), the ledger's apply entry, git commits, PDFs, `Handoffs/Production.md` | Standing Rules · `Methodology/Rules — Production.md` · `Handoffs/Production.md` · approved cards on the page | Managing editor |
 | Managing editor | **Managing Editor**, plus the scheduled Watcher | `Fact Check/Watcher/`, `Fact Check/Directive Register.md`, `Scratch Notes.md` (routing marks), `Handoffs/Managing Editor.md` | Standing Rules · `Methodology/Rules — Managing Editor.md` · each file in `Handoffs/` · `Fact Check/Watcher/Directives.md` | the role each item belongs to |

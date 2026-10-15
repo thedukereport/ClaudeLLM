@@ -5,8 +5,10 @@ Requires:
   1. `build` writes only the dashboard-load files; an ask naming Ch02/L5 comes
      with that line's text and the paragraph before it;
   2. with no library index, `build` writes no back-fill cards and says so;
-     with an index holding Common Sense, that work is UNREAD and The
-     Federalist Papers is NOT IN THE LIBRARY;
+     with an index holding Common Sense, the page gets only The Federalist
+     Papers (NOT IN THE LIBRARY); Common Sense (in the library, unread) goes
+     to the Fact-checker's reading queue instead, and `queue` without
+     --write writes only its sample;
   3. `answers` without --write changes no file;
   4. with --write, an answered ask leaves Open and lands in Answered with the
      author's words;
@@ -62,8 +64,18 @@ with T.sample_copy() as v:
     if (load / "backlog.json").exists():
         lanes = {x["data"]["title"]: x["data"]["lane"]
                  for x in json.loads((load / "backlog.json").read_text(encoding="utf-8"))}
-    if lanes.get("Common Sense") != "unread" or lanes.get("The Federalist Papers") != "notondrive":
+    if "Common Sense" in lanes or lanes.get("The Federalist Papers") != "notondrive":
         bad.append(f"back-fill lanes are wrong: {lanes} {r.stdout[-300:]}")
+    before = T.files(v)
+    r = T.run(v, "dashboard-sync.py", "queue")
+    made = {p.relative_to(v).as_posix() for p in set(T.files(v)) - set(before)}
+    sample = [p for p in made if p.startswith("Handoffs/editor-tools/samples/reading-queue/sample-")]
+    if r.returncode != 0 or not sample or (v / "Fact Check" / "Reading Queue.md").exists():
+        bad.append(f"queue sample: {sorted(made)} {r.stdout[-300:]} {r.stderr[-300:]}")
+    else:
+        txt = (v / sample[0]).read_text(encoding="utf-8")
+        if "### *Common Sense*" not in txt.split("## 2.")[0] or "how it came into the book:" not in txt:
+            bad.append("the reading queue sample lacks Common Sense in part 1 with how it came into the book")
 
     s = v / T.SNAP_REL
     (s / "asks").mkdir(parents=True, exist_ok=True)
@@ -109,6 +121,7 @@ with T.sample_copy() as v:
         bad.append("a second run queued the same back-fill press twice")
 
 T.finish("dashboard-sync", bad,
-         "dashboard-sync: build loads the ask with its line and the back-fill lanes from the index; "
+         "dashboard-sync: build loads the ask with its line and only the works the library lacks; "
+         "the reading queue gets the unread ones; "
          "the sample writes nothing; an answer moves its row with the author's words; one queue row "
          "and one event per press; a second run changes nothing")

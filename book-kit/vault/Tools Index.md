@@ -62,8 +62,9 @@ Each script in `tools/`, in its own words (its first docstring line), with who r
 | `check-card-logged.py` | no card reaches the author naming a read that is not on record | Editor; smoke test |
 | `check-card-words.py` | never offer the author a banned word on a card | Editor; smoke test |
 | `check-card-notes.py` | no card reaches the author with a footnote the author's rules send back | Editor, per card (`--card`) |
-| `check-card-closed.py` | no card reaches the author on a line or note the author has already approved | Editor, per card (`--card`) |
-| `dashboard-sync.py` | loads the Asks and Back-fill views of the page, and reads the author's presses back | Systems |
+| `check-card-closed.py` | no card reaches the author on a line or note the author has already approved, except through the Reopen? view | Editor, per card (`--card`) |
+| `prose.py` | records that the neurolinguistic-prose skill ran on a card's exact text, and lists the open cards without that record | Editor, per card (`--record-card`) |
+| `dashboard-sync.py` | loads the Asks and Back-fill views of the page, reads the author's presses back, and writes the Fact-checker's reading queue (`queue`) | Systems; Fact-checker (`queue`) |
 
 ## Locks and output
 

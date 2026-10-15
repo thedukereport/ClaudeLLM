@@ -9,11 +9,11 @@ The rest of this repository (the local library search and the source servers) is
 ## How the work moves
 
 ```
-            you rule on two queues only
+            you rule in one place only
      ┌──────────────────────────────────────┐
-     │  Source Rulings page    Fact Check/   │
-     │  (cards: Current and    Asks.md       │
-     │   Proposed text)        (questions)   │
+     │  Source Rulings page                  │
+     │  cards: Current and     Asks tab:     │
+     │  Proposed text          questions     │
      └───────▲──────────────────────▲───────┘
              │ cards                │ asks
    ┌─────────┴─────┐        ┌───────┴────────┐
@@ -73,7 +73,7 @@ book-kit/
 2. Put your chapters in `Chapters/` as `Chapter 01 - Title.md`, `Chapter 02 - Title.md` and so on, with footnotes in Markdown (`[^slug]` in the text, `[^slug]: …` at the end of the chapter).
 3. Run `python3 tools/bookconfig.py` (it prints what it found), then `python3 tools/blockid.py --write` (block ids on each paragraph and note), then `python3 tools/smoke-test.sh`.
 4. Publish the review page: [`page/README.md`](./page/README.md). Put its URL in `book.toml`.
-5. Make one Claude project for the book, and one chat per role, each opened with its line from `Methodology/Roles.md` ("Open with").
+5. Make one Claude project for the book, and one chat per role, each opened with its **Start** prompt from `Chat Prompts.md`. When a chat compresses, use its **Recover** prompt; when it goes wrong, **Close** it and open a new one ([`how-to/07`](./how-to/07%20When%20a%20chat%20gets%20long%20or%20compresses.md)).
 6. Practise first on the sample. From the `book-kit` folder: `BOOK_VAULT=sample python3 vault/tools/check-read.sh`. The guides in [`how-to/`](./how-to/) walk through each planted fault.
 
 ## The rules travel with the tools
