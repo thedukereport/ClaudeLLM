@@ -21,9 +21,13 @@ The page is a claude.ai artifact with a small database. Your presses are saved i
 
 A green box at the top lists the cards ready for you and the new ones, and the browser tab shows the count. The page holds one queue for you: no count appears above the cards unless it opens a list you can work through.
 
+## Your words to the Editor
+
+Every proposal card, in every state, ends with a box headed "Your words to the Editor", for a question, a comment or an instruction about that card. Clicking outside the box saves it; "Save my words" does the same; "This is a directive" saves it as a directive. Each save goes on the card (`note`, `notedAt`, and `directiveAt` for a directive) and into `presses` (action `card-note` or `directive`, your words in `reason`), and shows under "Not yet read by Claude" until Claude reads the card. Triage items have the same box. Every result of a press, saved or refused, shows on the card beside the button you pressed.
+
 ## Your typing is kept
 
-Every write to the database, from any chat, redraws the page. So the page keeps each keystroke in every box as a draft in this browser (`localStorage`, key `sr-drafts`, kept 14 days), puts each draft back after a redraw with the cursor where it was, and marks the card "Unsaved draft". A draft clears when the saved text equals it, or when you press "Throw away my edits". Drafts live only in the browser you typed in.
+Every write to the database, from any chat, redraws the page. So the page keeps each keystroke in every box as a draft in this browser (`localStorage`, key `sr-drafts`, kept 14 days), puts each draft back after a redraw with the cursor where it was, and marks the card "Unsaved draft". A draft clears when the saved text equals it, or when you press "Throw away my edits". A redraw never saves a box for you: your text stays a draft until you click outside the box or press a button. Drafts live only in the browser you typed in.
 
 ## The gates
 
@@ -93,6 +97,7 @@ Text fields hold Markdown as it goes into the chapter, footnote markers included
 | `proseCheck` | `{ok, state, text, sha, audit, at, tool}` from `tools/prose.py` |
 | `lineReopenedAt`, `lineReopenText`, `lineReopenWords` | written by the page when you press "Reopen this line": when, the text you saw, your words |
 | `lineKeptAt`, `lineKeptText`, `lineKeepWords` | the same for "Keep it closed" |
+| `note`, `notedAt`, `directiveAt` | written by the page: your words to the Editor on this card, when you saved them, and when you marked them a directive |
 | `covers` | ids of `sources` rows this card replaces |
 
 ## How Claude writes a card
@@ -154,7 +159,7 @@ Example:
 
 ## The other collections' fields
 
-- `presses`: `card`, `title`, `button`, `action` (approve, send, undo, withdraw, reopen, reopenline, keepclosed, ask, backfill, triage …), `at`, `result` (saved, refused, not saved, failed), `reason`.
+- `presses`: `card`, `title`, `button`, `action` (approve, send, undo, withdraw, reopen, reopenline, keepclosed, card-note, directive, ask, backfill, triage …), `at`, `result` (saved, refused, not saved, failed), `reason`.
 - `sources`: `order`, `group` (the passage card it belongs to), `gtitle`, `chapter`, `code`, `source`, `kind` (`later`: in the chapter now; `new`: new card today; `prop`: earlier card), `question`, `yourDraft`, `sourceSays`, `proposed`, `card`, `firstWith`, `lastWithout`, `notes`, `before`, `para`, `paraWhere`, `paraNote`, `after`, `dep`; the page writes `ruling` (do, dont, skip, delete), `ruledAt`, `comment`.
 - `triage`: `order`, `lane` (cut, ship, drop), `chapter`, `line`, `src`, `text`, `cut`, `cutFound`, `reason`, `finding`; the page writes `ruling` (agree, no) and `ruledAt`.
 - `register/summary`: `total`, `asOf`, `byChapter` (`[{ch, open}]`), `note`.

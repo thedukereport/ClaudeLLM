@@ -106,6 +106,8 @@ textarea.drafty{border-color:#c98a2e!important;box-shadow:0 0 0 2px rgba(201,138
 .pstate.ok{color:var(--keep)}
 .flash{margin:8px 0;padding:8px 10px;border-radius:6px;font:600 13px/1.4 var(--body);border:1px solid var(--keep);color:var(--keep)}
 .flash.bad{border-color:var(--cut);color:var(--cut)}
+.pznote{display:grid;gap:8px;border-top:1px dashed var(--rule);padding-top:12px}
+.pznote .flash{margin:0}
 .unread{margin:8px 0 0;font:500 13px/1.5 var(--body)}
 .unread:empty{display:none}
 .unread .ulbl{font-weight:600;margin-right:6px}
@@ -212,7 +214,7 @@ textarea.drafty{border-color:#c98a2e!important;box-shadow:0 0 0 2px rgba(201,138
       <div class="unread" id="unread" aria-live="polite"></div>
       <div class="openwork" id="openwork" aria-live="polite"></div>
       <details class="dk-how rubric-wrap"><summary class="rubric-sum">How this page works</summary>
-        <p class="lede">One card at a time; Previous and Next, or the arrow keys, move you through. Your desk, the bar you open and close under the buttons, lists what Claude has checked and sent back to you, the new cards, and what Claude has not yet read; its top line shows the counts, and the browser tab shows the number ready for you. <b>Waiting for you</b> holds what needs your decision. <b>Approved, going in</b> holds what you approved that is not in the chapter yet. <b>In the book</b> holds what is done; every button there still works. <b>Asks</b> holds what Claude needs from you, one card at a time. <b>Reopen?</b> shows, whole, a card that would change a line you approved; Reopen this line sends it to Waiting for you, and Keep it closed ends it. <b>Back-fill</b> lists the works the book cites that Claude cannot find in the library.</p>
+        <p class="lede">One card at a time; Previous and Next, or the arrow keys, move you through. Your desk, the bar you open and close under the buttons, lists what Claude has checked and sent back to you, the new cards, and what Claude has not yet read; its top line shows the counts, and the browser tab shows the number ready for you. <b>Waiting for you</b> holds what needs your decision. <b>Approved, going in</b> holds what you approved that is not in the chapter yet. <b>In the book</b> holds what is done; every button there still works. <b>Asks</b> holds what Claude needs from you, one card at a time. <b>Reopen?</b> shows, whole, a card that would change a line you approved; Reopen this line sends it to Waiting for you, and Keep it closed ends it. <b>Back-fill</b> lists the works the book cites that Claude cannot find on the local shelves.</p>
         <span class="rubric-sum" style="cursor:default">What the buttons mean</span>
         <div class="rubric" role="note" aria-label="How to rule">
       <div><b class="r-do">Do it</b>Yes to the question as asked.</div>
@@ -333,7 +335,36 @@ ${p.noteless?"":`<label class="ed">${esc(p.noteLabel||"Proposed footnote")} · y
       ${p.review?`<div><span class="nbl">Claude's check · ${esc(fmt(p.reviewedAt))}</span><div class="chk">${esc(p.review)}</div></div>`:""}
       ${st}
       ${btns?`<div class="actions">${btns}</div>`:""}
+      ${pzNoteHTML(g,p)}
     </section>`;
+  }
+  // THE AUTHOR'S WORDS ON A CARD. The author, on a card: "There is no field for my feedback."
+  // Every proposal card, in every state, has the box the triage items have: "Your words to
+  // the Editor". Clicking outside the box saves it (note, notedAt on the card, and a press "card-note"); "This is
+  // a directive" saves it as a directive (directiveAt, and a press "directive"). The draft-keeping of v40 covers the
+  // box. Every result of these two, saved or refused, shows on the card beside the button (state.noteFlash).
+  function pzNoteHTML(g,p){
+    const nf=state.noteFlash&&state.noteFlash.g===g?state.noteFlash:null;
+    const saved=p.directiveAt&&p.directiveAt>=(p.notedAt||"")?` · directive saved ${esc(fmt(p.directiveAt))}`:p.notedAt?` · saved ${esc(fmt(p.notedAt))}`:"";
+    return `<div class="pznote">
+      <label class="ed" for="pznote-${esc(g)}">Your words to the Editor${saved}<textarea id="pznote-${esc(g)}" data-pznote rows="3" class="note" placeholder="A question, a comment, or an instruction. Saved when you click outside the box.">${esc(p.note||"")}</textarea></label>
+      <div class="actions"><button type="button" class="send" data-pznact="directive">This is a directive</button><button type="button" data-pznact="save">Save my words</button></div>
+      ${nf?`<div class="flash ${nf.ok?"":"bad"}" role="status">${esc(nf.msg)}</div>`:""}
+    </div>`;
+  }
+  async function saveCardNote(g,box,kind,label){
+    const p=state.props.get(g), ta=box.querySelector("textarea[data-pznote]"), v=ta?ta.value:"", now=new Date().toISOString();
+    const say=(ok,msg)=>{state.noteFlash={g,ok,msg}; render();};
+    if(!p) return;
+    if(!state.db){say(false,"Not saved. This view can't save; open the page signed in to claude.ai. Your words stay in the box.");return;}
+    if(kind==="directive"&&!v.trim()){logPress(g,p,"directive",label,"refused","the box was empty");say(false,"Not saved. Write your directive in the box first, then press This is a directive.");return;}
+    if(kind!=="directive"&&v===(p.note||"")){ if(kind==="save") say(true,v.trim()?`Already saved ${fmt(p.notedAt)}. The Editor reads it at its next reply.`:"The box is empty; there is nothing to save."); return; }
+    const patch=kind==="directive"?{note:v,notedAt:now,directiveAt:now}:{note:v,notedAt:v.trim()?now:""};
+    try{await state.db.doc("proposals/"+g).update(patch);
+      logPress(g,p,kind==="directive"?"directive":"card-note",label,v.trim()?"saved":"cleared",v);
+      say(true,kind==="directive"?`Saved as a directive, ${fmt(now)}. The Editor acts on it at its next reply.`:v.trim()?`Saved ${fmt(now)}. The Editor reads it at its next reply.`:`Your words were cleared, ${fmt(now)}.`);}
+    catch(err){logPress(g,p,kind==="directive"?"directive":"card-note",label,"failed",(err&&(err.code||err.message))||"error");
+      say(false,"Not saved ("+(err&&err.code||"error")+"). Your words stay in the box. Press the button again; if it fails twice, reload the page.");}
   }
   function cardsAll(){
     const groups=new Map();
@@ -421,7 +452,9 @@ ${p.noteless?"":`<label class="ed">${esc(p.noteLabel||"Proposed footnote")} · y
     const T=state.triage.slice().sort((x,y)=>(LANEORDER[x.lane]??9)-(LANEORDER[y.lane]??9)||(x.order||0)-(y.order||0));
     if(state.triView==="ruled") return T.filter(t=>t.ruling&&!triHeld(t));
     if(state.triView==="held") return T.filter(t=>triHeld(t));
-    return T.filter(t=>!t.ruling&&!triHeld(t));
+    // The item the author just answered stays on screen with its result beside the buttons; Next moves on and drops it.
+    const pin=state.triFlash&&state.triFlash.ok?state.triFlash.id:null;
+    return T.filter(t=>(!t.ruling&&!triHeld(t))||t.id===pin);
   }
   function triageHTML(){
     const T=state.triage; if(!T.length) return '<div class="empty">No triage items.</div>';
@@ -453,7 +486,8 @@ ${p.noteless?"":`<label class="ed">${esc(p.noteLabel||"Proposed footnote")} · y
       <label class="ed" for="trimine-${esc(t.id)}">Your version of the line · you can edit this<textarea id="trimine-${esc(t.id)}" data-trimine rows="${Math.min(12,Math.max(3,Math.ceil(String(mine).length/80)))}" class="${t.myVersion&&t.myVersion!==t.text?"changed":""}">${esc(mine)}</textarea></label>
       <label class="ed" for="trinote-${esc(t.id)}">Your words to the Editor${t.notedAt?` · saved ${esc(fmt(t.notedAt))}`:""}<textarea id="trinote-${esc(t.id)}" data-trinote rows="3" class="note" placeholder="An instruction, a question, or a comment">${esc(t.note||"")}</textarea></label>
       ${st}
-      <div class="actions">${btn("agree","Agree","ok")}${btn("mine","Use my version","go")}${btn("directive","This is a directive","send")}${btn("no","No, keep it open","no")}${t.ruling?'<button type="button" class="clear" data-tri="">Clear my answer</button>':""}</div>`}
+      <div class="actions">${btn("agree","Agree","ok")}${btn("mine","Use my version","go")}${btn("directive","This is a directive","send")}${btn("no","No, keep it open","no")}${t.ruling?'<button type="button" class="clear" data-tri="">Clear my answer</button>':""}</div>
+      ${state.triFlash&&state.triFlash.id===t.id?`<div class="flash ${state.triFlash.ok?"":"bad"}" role="status">${esc(state.triFlash.msg)}</div>`:""}`}
     </article>${nav}`;
   }
   // ASKS — one card per open row of Fact Check/Asks.md (tools/dashboard-sync.py loads them; the author's press goes back into the file).
@@ -469,7 +503,7 @@ ${p.noteless?"":`<label class="ed">${esc(p.noteLabel||"Proposed footnote")} · y
     const btn=(v,t)=>`<button type="button" class="${v}" data-ask="${v}" aria-pressed="${a.answer===v}"${a.writtenAt?" disabled":""}>${t}</button>`;
     const st=a.writtenAt?`<div class="pstate ok">Your answer is in Fact Check/Asks.md since ${esc(fmt(a.writtenAt))}.</div>`
       :a.answer?`<div class="pstate ok">You answered ${a.answer==="words"?"in your own words":"“"+esc(a.answer)+"”"} ${esc(fmt(a.answeredAt))}${a.words&&a.answer!=="words"?", with your words below":""}. Claude writes it into Fact Check/Asks.md at its next reply. You can change it until then.</div>`
-      :`<div class="pstate">Waiting for your answer. Ok and No can keep your words with them: type in the box first and they are kept with the button you press.</div>`;
+      :`<div class="pstate">Waiting for your answer. Ok and No can carry your words: type in the box first and they are kept with the button you press.</div>`;
     return `${sub}${nav}<article class="passage">
       <h2 class="ptitle">${esc(a.aid||a.id)} · ${esc(a.kind)}<span class="badge ${a.answer?"done":"wait"}">${a.answer?"Answered":"Waiting for you"}</span></h2>
       <div class="ask-meta"><p class="job pz-free"><b class="nbl" style="display:inline;margin-right:6px">What it holds up</b>${esc(a.blocks)}</p></div>
@@ -484,7 +518,7 @@ ${p.noteless?"":`<label class="ed">${esc(p.noteLabel||"Proposed footnote")} · y
       <details class="more"><summary>Where it came from</summary><dl class="meta"><dt>File</dt><dd>Fact Check/Asks.md, line ${esc(a.fileLine)}</dd><dt>Asked</dt><dd>${esc(a.asked)}</dd></dl></details>
     </article>${nav}`;
   }
-  // BACK-FILL — works the footnotes cite with no logged read (tools/dashboard-sync.py build), in the chapters in the workflow.
+  // BACK-FILL — works the footnotes cite with no logged read (check-read.sh), Chapters 2–27.
   // The author's rule: the point of scanning the footnotes for unread citations is to read them. A work in the library
   // goes to the Fact-checker's reading queue (Fact Check/Reading Queue.md) and never to this view. Only a work the
   // library cannot produce comes here, as "I cannot find it. Can you get it?"
@@ -543,14 +577,14 @@ ${p.noteless?"":`<label class="ed">${esc(p.noteLabel||"Proposed footnote")} · y
   // TRIAGE NOTES. Each triage item has a note box; the author's words are saved on the item (note, notedAt) and in a
   // press record, which the Editor reads at each reply.
   listEl.addEventListener("focusout",async e=>{
-    const t=e.target; if(!t.matches("textarea[data-trinote]")||!state.db) return;
+    const t=e.target; if(!t.matches("textarea[data-trinote]")||!state.db||state.rendering||!t.isConnected) return;
     const id=t.closest(".tri-card").dataset.tid, it=state.triage.find(x=>x.id===id), v=t.value.trim();
     if(!it||(it.note||"")===v) return;
     const now=new Date().toISOString();
     try{await state.db.doc("triage/"+id).update({note:v,notedAt:v?now:""});
       logPress(id,{title:`Triage Ch ${String(it.chapter).padStart(2,"0")} line ${it.line||""} · ${it.src||""}`},"triage-note","Note",v?"saved":"cleared",v);
-      setStatus("Note saved. The Editor reads it at its next reply.");}
-    catch(err){setStatus("That note didn't save ("+(err&&err.code||"error")+"). Click into it and out again to retry.",true);}
+      state.triFlash={id,ok:true,msg:`Your words saved ${fmt(now)}. The Editor reads them at its next reply.`}; render();}
+    catch(err){state.triFlash={id,ok:false,msg:"Your words did not save ("+(err&&err.code||"error")+"). They stay in the box; click into it and out again to retry."}; render();}
   });
   // THE NOTE GATE. The author's rule: every card's note is checked before it reaches the author.
   // tools/check-card-notes.py checks a card's footnote and the result is stored on the card as
@@ -678,7 +712,7 @@ ${p.noteless?"":`<label class="ed">${esc(p.noteLabel||"Proposed footnote")} · y
   function unread(){
     const out=[];
     for(const [g,p] of state.props){
-      const ev=[["approvedAt","Approved"],["submittedAt","Sent for checking"],["editedAt","Edited"],["reopenedAt","Reopened"],["withdrawnAt","Approval withdrawn"],["lineReopenedAt","Line reopened"],["lineKeptAt","Line kept closed"]].filter(([k])=>p[k]).sort((a,b)=>p[b[0]]>p[a[0]]?1:-1);
+      const ev=[["approvedAt","Approved"],["submittedAt","Sent for checking"],["editedAt","Edited"],["reopenedAt","Reopened"],["withdrawnAt","Approval withdrawn"],["lineReopenedAt","Line reopened"],["lineKeptAt","Line kept closed"],["notedAt","Your words"],["directiveAt","Directive"]].filter(([k])=>p[k]).sort((a,b)=>p[b[0]]>p[a[0]]?1:-1);
       if(!ev.length) continue;
       const [k,label]=ev[0], at=p[k];
       if(at>(p.claudeReadAt||"")){const r=state.rows.find(x=>x.group===g); out.push({g,t:p.title||(r&&r.gtitle)||g,label,at});}
@@ -714,7 +748,9 @@ ${p.noteless?"":`<label class="ed">${esc(p.noteLabel||"Proposed footnote")} · y
   }
   function render(){
     const ae=document.activeElement, fk=draftKey(ae), sel=fk?{s:ae.selectionStart,e:ae.selectionEnd,top:ae.scrollTop}:null, y=window.scrollY;
-    renderInner();
+    // A box the redraw removes while it has the cursor fires focusout; state.rendering tells the save handlers that
+    // the author did not click away, so a redraw never saves a box on the author's behalf.
+    state.rendering=true; try{ renderInner(); } finally{ state.rendering=false; }
     let changed=false;
     listEl.querySelectorAll("textarea").forEach(el=>{ const k=draftKey(el), d=state.drafts[k]; if(!d) return;
       if(d.v===el.value){ delete state.drafts[k]; changed=true; return; }
@@ -768,11 +804,11 @@ ${p.noteless?"":`<label class="ed">${esc(p.noteLabel||"Proposed footnote")} · y
     state.view="all"; state.key=b.dataset.jump; closeDesk(); render(); window.scrollTo(0,0);
   });
   listEl.addEventListener("click",e=>{
-    const g=e.target.closest("button[data-goview]"); if(g){state.view=g.dataset.goview; state.key=null; state.flash=null; try{localStorage.setItem("sr-view",state.view);}catch(err){} render(); window.scrollTo({top:0}); return;}
+    const g=e.target.closest("button[data-goview]"); if(g){state.view=g.dataset.goview; state.key=null; state.flash=null; state.noteFlash=null; state.triFlash=null; try{localStorage.setItem("sr-view",state.view);}catch(err){} render(); window.scrollTo({top:0}); return;}
     const b=e.target.closest("button[data-nav]"); if(!b) return;
     const list=visibleCards(); let idx=list.findIndex(c=>c.key===state.key);
     idx=(idx+Number(b.dataset.nav)+list.length)%list.length;
-    state.key=list[idx].key; state.flash=null;
+    state.key=list[idx].key; state.flash=null; state.noteFlash=null; state.triFlash=null;
     if(list.length===1) state.key=null;
     // after moving, drop the pin on a card that no longer belongs in this view
     render(); window.scrollTo({top:0});
@@ -783,26 +819,27 @@ ${p.noteless?"":`<label class="ed">${esc(p.noteLabel||"Proposed footnote")} · y
   });
   $("#filters").addEventListener("click",e=>{
     const b=e.target.closest("button[data-v]"); if(!b) return;
-    state.view=b.dataset.v; state.key=null; state.flash=null; try{localStorage.setItem("sr-view",state.view);}catch(err){}
+    state.view=b.dataset.v; state.key=null; state.flash=null; state.noteFlash=null; state.triFlash=null; try{localStorage.setItem("sr-view",state.view);}catch(err){}
     render();
   });
   listEl.addEventListener("click",async e=>{
-    const v=e.target.closest("button[data-triview]"); if(v){state.triView=v.dataset.triview; state.triKey=null; render(); return;}
-    const n=e.target.closest("button[data-trinav]"); if(n){const l=triList(); let i=l.findIndex(t=>t.id===state.triKey); i=(i+Number(n.dataset.trinav)+l.length)%l.length; state.triKey=l[i].id; render(); window.scrollTo({top:0}); return;}
+    const v=e.target.closest("button[data-triview]"); if(v){state.triView=v.dataset.triview; state.triKey=null; state.triFlash=null; render(); return;}
+    const n=e.target.closest("button[data-trinav]"); if(n){const l=triList(); let i=l.findIndex(t=>t.id===state.triKey); i=(i+Number(n.dataset.trinav)+l.length)%l.length; state.triKey=l[i].id; state.triFlash=null; render(); window.scrollTo({top:0}); return;}
     const one=e.target.closest("button[data-tri]"); if(!one) return;
-    if(!state.db){setStatus("This view can't save. Open the page signed in to claude.ai.",true);return;}
     const card=one.closest(".tri-card"), id=card.dataset.tid, t=state.triage.find(x=>x.id===id); if(!t) return;
+    const tsay=(ok,msg)=>{state.triFlash={id,ok,msg}; render();};
+    if(!state.db){tsay(false,"Not saved. This view can't save; open the page signed in to claude.ai.");return;}
     const act=one.dataset.tri, now=new Date().toISOString();
     const mine=(card.querySelector("textarea[data-trimine]")||{}).value||"", words=((card.querySelector("textarea[data-trinote]")||{}).value||"").trim();
-    if(act==="mine"&&mine.trim()===String(t.text).trim()){setStatus("Edit the line in the first box first, then press Use my version.",true);return;}
-    if(act==="directive"&&!words){setStatus("Write your directive in the second box first, then press This is a directive.",true);return;}
+    if(act==="mine"&&mine.trim()===String(t.text).trim()){logPress(id,{title:`Triage Ch ${String(t.chapter).padStart(2,"0")} line ${t.line||""} · ${t.src||""}`},"triage",one.textContent.trim(),"refused","the line was unchanged");tsay(false,"Not saved. Edit the line in the first box first, then press Use my version.");return;}
+    if(act==="directive"&&!words){logPress(id,{title:`Triage Ch ${String(t.chapter).padStart(2,"0")} line ${t.line||""} · ${t.src||""}`},"triage",one.textContent.trim(),"refused","the second box was empty");tsay(false,"Not saved. Write your directive in the second box (Your words to the Editor) first, then press This is a directive.");return;}
     const patch=act===""?{ruling:"",ruledAt:""}:{ruling:act,ruledAt:now,note:words,notedAt:words?now:(t.notedAt||"")};
     if(act==="mine") patch.myVersion=mine;
     try{await state.db.doc("triage/"+id).update(patch);
       logPress(id,{title:`Triage Ch ${String(t.chapter).padStart(2,"0")} line ${t.line||""} · ${t.src||""}`},"triage",one.textContent.trim(),"saved",[act==="mine"?"Author's version: "+mine:"",words?"Author's words: "+words:""].filter(Boolean).join(" | "));
-      setStatus(act===""?"Answer cleared.":"Saved. The Editor acts on it at its next reply.");
-      if(act&&state.triView==="open"){const l=triList().filter(x=>x.id!==id); const i=Math.max(0,triList().findIndex(x=>x.id===id)); state.triKey=l.length?l[Math.min(i,l.length-1)].id:null;}
-    }catch(err){setStatus("Not saved ("+(err&&err.code||"error")+"). Press it again; if it fails twice, reload the page.",true);}
+      tsay(true,act===""?`Answer cleared, ${fmt(now)}.`:`${TRIRULED[act]||"Saved"}, saved ${fmt(now)}. The Editor acts on it at its next reply. Next ▶ takes you to the next item.`);
+      state.triKey=id;
+    }catch(err){tsay(false,"Not saved ("+(err&&err.code||"error")+"). Press it again; if it fails twice, reload the page.");}
   });
   const busy=new Set();
   listEl.addEventListener("click",async e=>{
@@ -830,7 +867,18 @@ ${p.noteless?"":`<label class="ed">${esc(p.noteLabel||"Proposed footnote")} · y
     const rv=t.dataset.seg!=null?(segs(p.reviewedPara)[+t.dataset.seg]||""):(t.dataset.pf==="proposedPara"?p.reviewedPara:p.reviewedNote);
     t.classList.toggle("changed",t.value!==rv);
   });
-  listEl.addEventListener("mousedown",e=>{ if(e.target.closest("button[data-pact]")) e.preventDefault(); });
+  listEl.addEventListener("mousedown",e=>{ if(e.target.closest("button[data-pact],button[data-pznact],button[data-tri]")) e.preventDefault(); });
+  // No box saves because a redraw removed it: the focusout a redraw causes stops here, before any save handler.
+  listEl.addEventListener("focusout",e=>{ if(state.rendering||!e.target.isConnected) e.stopImmediatePropagation(); },true);
+  listEl.addEventListener("focusout",e=>{
+    const t=e.target; if(!t.matches("textarea[data-pznote]")||state.rendering||!t.isConnected) return;
+    if(e.relatedTarget&&e.relatedTarget.closest&&e.relatedTarget.closest("button[data-pznact]")) return;
+    const box=t.closest(".pz"); saveCardNote(box.dataset.g,box,"blur","Your words (clicked outside the box)");
+  });
+  listEl.addEventListener("click",e=>{
+    const b=e.target.closest("button[data-pznact]"); if(!b) return;
+    const box=b.closest(".pz"); saveCardNote(box.dataset.g,box,b.dataset.pznact,b.textContent.trim());
+  });
   listEl.addEventListener("focusout",async e=>{
     const t=e.target; if(!t.matches("textarea[data-pf]")||t.readOnly) return;
     if(e.relatedTarget&&e.relatedTarget.closest&&e.relatedTarget.closest("button[data-pact]")) return;
