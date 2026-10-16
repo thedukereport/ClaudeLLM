@@ -9,6 +9,12 @@ It's two things working together:
 1. **A local RAG** — semantic search over *your own* PDF/EPUB library (meaning-based, not keyword), with a web dashboard to add books, health-check them, and tune the search.
 2. **Fifteen MCP servers** — full-text-searchable corpora, held locally and usable without an internet connection once built, that Claude Desktop / Cowork can query as tools: scriptures, classical Greek & Latin, papyri, ancient places, ancient chronography (Eusebius & Syncellus) and cuneiform royal inscriptions, all of Wikipedia, Project Gutenberg — plus an English dictionary/thesaurus (WordNet), Wiktionary across hundreds of languages, and an offline astrology calculator.
 
+## Also here: a book kit
+
+[`book-kit/`](./book-kit/) is a system for writing a non-fiction book with Claude. It sets up six role chats (Editor, Fact-checker, Production, Managing editor, Systems, and you as the author), a review page where you approve each change before it goes into a chapter, tools that log each source Claude reads and flag any citation nobody has read, and a two-chapter practice book with mistakes planted on purpose for you to find.
+
+Start with [`book-kit/README.md`](./book-kit/README.md), or give Claude [`book-kit/BOOTSTRAP-BOOK.md`](./book-kit/BOOTSTRAP-BOOK.md) and it will set the kit up with you. The kit works on its own; Claude can also use the servers in this repository as reference sources while it checks the book.
+
 ## The easy way: let Claude build it for you
 
 You don't need to follow the guides by hand. **Open Claude Cowork (or Claude Desktop), and give it [`BOOTSTRAP.md`](./BOOTSTRAP.md)** — that file tells Claude to interview you (what computer you have, what you want to search, your experience level) and then set the whole thing up with you, step by step. It works on **macOS and Windows**.
@@ -33,6 +39,7 @@ servers/             ← the MCP servers, each with its build script
   pleiades/    wikipedia/  wikispooks/  gutenberg/  atlas/  astrology/  wordnet/
   chronography/  cuneiform/  wiktionary/
 dashboard/           ← optional macOS control panel (author's example)
+book-kit/            ← a system for writing a book with Claude (see its README)
 book-kit/            ← the book kit: roles, rules, checks, review page, sample book, guides
 ```
 
