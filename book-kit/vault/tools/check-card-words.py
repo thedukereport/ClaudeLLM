@@ -3,6 +3,7 @@
 
     tools/check-card-words.py            # every card waiting on the author or approved
     tools/check-card-words.py --json     # one object per finding
+    tools/check-card-words.py --card ID  # one card
 
 WHOSE RULE THIS IS
 
@@ -16,8 +17,8 @@ WHOSE RULE THIS IS
 
 WHAT IT READS
 
-    Cards from the page snapshot (book.toml [paths] page_snapshot) whose
-    status is yours, submitted or approved. On each, the text the author
+    Cards in the card store (`tools/cards.py`, folded with the author's
+    presses) whose status is yours, submitted or approved. On each, the text the author
     would approve: `reviewedPara` / `reviewedNote` when set, else
     `proposedPara` / `proposedNote`.
 
@@ -40,7 +41,7 @@ WHAT IT READS
 
     A hit is a coordinate, never a verdict: the carve-out prints beside it so
     a reader can rule in one glance. It exits 1 when there are hits, 2 when the
-    snapshot or the word list is missing — a check that did not run.
+    word list is missing — a check that did not run.
 """
 import importlib.machinery
 import importlib.util
@@ -83,14 +84,61 @@ def norm(s):
     return re.sub(r"\s+", " ", s or "").strip()
 
 
+_WORDS = []
+
+
+def card_hits(card, words=None, counter=None):
+    """Each banned word the card offers in the text the author would approve. The one check:
+    tools/cards.py runs it on each version as it goes in, and tools/card-desk.py on each card it draws."""
+    if words is None:
+        if not _WORDS:
+            _WORDS.extend(banned_words())
+        words = _WORDS
+    hits = []
+    his = norm((card.get("submittedPara") or "") + " " + (card.get("submittedNote") or ""))
+    chapter = norm(" ".join(c.get("text", "") for c in (card.get("current") or [])
+                            if isinstance(c, dict)))
+    for reviewed, proposed, label in FIELDS:
+        text = card.get(reviewed) or card.get(proposed) or ""
+        if not text.strip() or (label == "note" and card.get("noteless")):
+            continue
+        field = reviewed if card.get(reviewed) else proposed
+        stripped = strip_quoted(text)
+        for rx, pattern, carve, rx_auto in words:
+            for m in rx.finditer(stripped):
+                window = text[max(0, m.start() - 40):m.end() + 40]
+                if rx_auto is not None and rx_auto.search(window):
+                    continue
+                if his and norm(window) in his:
+                    continue
+                if chapter and norm(text[max(0, m.start() - 25):m.end() + 25]) in chapter:
+                    if counter is not None:
+                        counter.append(1)
+                    continue
+                hits.append({
+                    "check": "check-card-words",
+                    "where": C.norm(card.get("where")) or card.get("chapter", "—"),
+                    "card": card.get("id", ""),
+                    "title": C.norm(card.get("title")) or card.get("id", ""),
+                    "status": card.get("status"),
+                    "field": field,
+                    "word": m.group(0),
+                    "carve_out": carve,
+                    "context": norm(text[max(0, m.start() - 58):m.end() + 52]),
+                    # The fields the issue register reads, so it can show a
+                    # card's hit beside every other finding.
+                    "coord": C.norm(card.get("where")) or "—",
+                    "what": f"banned word '{m.group(0)}' on card \"{C.norm(card.get('title'))}\"",
+                })
+    return hits
+
+
 def main(argv):
     as_json = "--json" in argv
-    try:
-        taken, cards = C.snapshot_cards()
-    except FileNotFoundError as e:
-        print(json.dumps({"check": "check-card-words", "kind": "NO SNAPSHOT",
-                          "detail": str(e)}) if as_json else f"NOT RUN: {e}")
-        return 2
+    cards = C.store_cards()
+    if "--card" in argv:
+        want = argv[argv.index("--card") + 1]
+        cards = [c for c in cards if c["id"] == want]
     try:
         words = banned_words()
     except (FileNotFoundError, SystemExit) as e:
@@ -99,54 +147,18 @@ def main(argv):
     if not words:
         print("NOT RUN: no machine list found in Methodology/Word Lists.md")
         return 2
-    hits = []
-    in_chapter = 0
-    checked = 0
+    hits, in_chapter, checked = [], [], 0
     for card in cards:
         if card.get("status") not in C.CHECKED_STATUSES:
             continue
         checked += 1
-        his = norm((card.get("submittedPara") or "") + " " + (card.get("submittedNote") or ""))
-        chapter = norm(" ".join(c.get("text", "") for c in (card.get("current") or [])
-                                if isinstance(c, dict)))
-        for reviewed, proposed, label in FIELDS:
-            text = card.get(reviewed) or card.get(proposed) or ""
-            if not text.strip():
-                continue
-            field = reviewed if card.get(reviewed) else proposed
-            stripped = strip_quoted(text)
-            for rx, pattern, carve, rx_auto in words:
-                for m in rx.finditer(stripped):
-                    window = text[max(0, m.start() - 40):m.end() + 40]
-                    if rx_auto is not None and rx_auto.search(window):
-                        continue
-                    if his and norm(window) in his:
-                        continue
-                    if chapter and norm(text[max(0, m.start() - 25):m.end() + 25]) in chapter:
-                        in_chapter += 1
-                        continue
-                    hits.append({
-                        "check": "check-card-words",
-                        "where": C.norm(card.get("where")) or card.get("chapter", "—"),
-                        "card": card["id"],
-                        "title": C.norm(card.get("title")) or card["id"],
-                        "status": card.get("status"),
-                        "field": field,
-                        "word": m.group(0),
-                        "carve_out": carve,
-                        "context": norm(text[max(0, m.start() - 58):m.end() + 52]),
-                        # The fields the issue register reads, so it can show a
-                        # card's hit beside every other finding.
-                        "coord": C.norm(card.get("where")) or "—",
-                        "what": f"banned word '{m.group(0)}' on card "
-                                f"\"{C.norm(card.get('title'))}\"",
-                    })
+        hits += card_hits(card, words, in_chapter)
+    in_chapter = len(in_chapter)
     if as_json:
         for h in hits:
             print(json.dumps(h, ensure_ascii=False))
     else:
-        print(f"Page snapshot taken {taken.isoformat(timespec='minutes')}; "
-              f"{checked} cards checked (yours, submitted, approved); "
+        print(f"{checked} cards checked (yours, submitted, approved); "
               f"{len(words)} banned-word patterns from Word Lists.md.\n")
         for h in hits:
             print(f"  {h['where']}\n    {h['title']}  [{h['status']}, {h['field']}]\n"

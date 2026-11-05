@@ -13,9 +13,10 @@ WHY THIS EXISTS
 
 WHAT IS RECORDED, AND WHY IT IS HASHED
 
-    A `prose.audited` event names the card (sheet "Source Rulings", item =
-    card id), **the hash of the exact text that was audited**, and the
-    findings for each of the skill's fourteen principles. Rewrite the card
+    A `prose.audited` event names the card (sheet "Source Rulings", the key
+    the review page used and the card desk keeps; item = card id), **the hash of the exact text that was audited**, the
+    findings for each of the skill's fifteen principles, the verdict (ok, or
+    finding: a fault the writer must fix), and the session that recorded it. Rewrite the card
     and its audit goes stale by itself, because the audit was of the old
     words. The hash ignores whitespace: reflowing a paragraph is not a
     rewrite.
@@ -27,6 +28,17 @@ WHAT THIS FILE DOES NOT DO
     happened and against which words. A gate that could certify its own
     output would say the skill had run whenever the code said so.
 
+A SECOND SESSION AUDITS EACH CARD
+
+    The session that wrote a card also graded it, and its own faults passed.
+    The author's rule since: each card's prose audit is done by a session other
+    than the one that wrote the card. An audit counts toward the gate only when
+    its session wrote no version of the card with that text (the card store
+    records each version's session; `vaultlog.session_id()` gives the
+    session). book.toml [gates] "card_cross_audit": "warn" shows a
+    self-audited card as such; "refuse" holds it. An audit whose verdict is
+    "finding" keeps the card held until a new version is written and audited.
+
 THE TEXT AUDITED
 
     The text the author would approve: the paragraph box (`reviewedPara`,
@@ -36,21 +48,21 @@ THE TEXT AUDITED
 USE
 
     tools/prose.py [--from DIR] [--json] [--patch-dir D]
-        every open card on the page snapshot (or the card files in DIR):
+        every open card in the card store (or the card files in DIR):
         audited, stale or unrun. Exit 1 if any card lacks an audit of its
         current text. --patch-dir writes D/<card id>.json =
-        {"proseCheck": {...}} to merge into the card on the page.
+        {"proseCheck": {...}}.
     tools/prose.py --card F.json [--patch-dir D]
-        one card document, before it is written to the page. Exit 1 if its
+        one card document, before it goes into the store. Exit 1 if its
         text has no audit.
-    tools/prose.py --record-card F.json --findings G.json [--patch-dir D]
-        record the audit of that card's text. G holds the findings for all
-        fourteen principles; an audit that names fewer is refused.
+    tools/prose.py --record-card F.json --findings G.json --verdict ok|finding
+        record the audit of that card's text (F: a card file, or a card id in
+        the store). G holds the findings for all fifteen principles; an audit
+        that names fewer is refused.
 
-    The page holds a card under "With Claude", with no Approve button, until
-    its `proseCheck` says ok for the exact text the author would approve
-    (page function `proseHeld()`). A card written without this step does not
-    reach the author.
+    The card desk holds a card under "With Claude", with no Approve button,
+    until `prose_check` says ok for the exact text the author would approve.
+    A card written without this step does not reach the author.
 """
 from __future__ import annotations
 
@@ -64,8 +76,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import bookconfig as B  # noqa: E402
 
-#: The fourteen principles, by the name the skill gives each. An audit that
-#: records findings for fewer than all fourteen is a partial audit and is
+#: The fifteen principles, by the name the skill gives each. An audit that
+#: records findings for fewer than all fifteen is a partial audit and is
 #: refused: the skill's "Common Misses" section names principles that get
 #: skipped whenever the output does not name them.
 PRINCIPLES = (
@@ -73,6 +85,11 @@ PRINCIPLES = (
     "comparison", "emergence", "complex-equivalence", "mind-reading",
     "flourish", "telegraphing", "epistemic", "actor-verb-headings",
     "invented-person",
+    # Principle 15: an unspecified verb ("addresses", "deals with", "handles", "engages") says
+    # that something was done and not what. Added in the system this kit comes from when the
+    # author asked whether the check covered "invented people, unspecified verbs, abstract nouns,
+    # and nominalizations", and three of the four had no line in the audit.
+    "unspecified-verbs",
 )
 
 PAGE_SHEET = "Source Rulings"
@@ -84,7 +101,8 @@ def text_sha(text: str) -> str:
     return hashlib.sha256(re.sub(r"\s+", " ", (text or "")).strip().encode("utf-8")).hexdigest()[:16]
 
 
-def record(sheet: str, item: str, text: str, findings: dict, actor: str = "claude", why: str = "") -> dict:
+def record(sheet: str, item: str, text: str, findings: dict, actor: str = "claude", why: str = "",
+           verdict: str = "ok") -> dict:
     """Record that the skill ran on THIS text, with THESE findings. Refuses a partial audit or empty text."""
     if not (text or "").strip():
         raise ValueError("there is no text to audit")
@@ -95,8 +113,10 @@ def record(sheet: str, item: str, text: str, findings: dict, actor: str = "claud
             f"{', '.join(missing)}. The skill's Common Misses section names principles that get "
             f"skipped whenever the output does not name them, so a partial tally is not an audit.")
     import vaultlog
+    if verdict not in ("ok", "finding"):
+        raise ValueError('an audit gives its verdict: ok (no fault) or finding (a fault the writer must fix)')
     return vaultlog.append("prose.audited", actor=actor, sheet=sheet, item=str(item),
-                           text_sha=text_sha(text), findings=findings,
+                           text_sha=text_sha(text), findings=findings, verdict=verdict,
                            why=why or "neurolinguistic-prose, before this card reaches the author")
 
 
@@ -130,18 +150,57 @@ def card_state(card_id: str, card: dict, known: dict | None = None) -> str:
     return "audited" if text_sha(text) in got else "stale"
 
 
-def record_card(card_id: str, card: dict, findings: dict, actor: str = "claude", why: str = "") -> dict:
+def record_card(card_id: str, card: dict, findings: dict, actor: str = "claude", why: str = "",
+                verdict: str = "ok") -> dict:
     return record(PAGE_SHEET, card_id, card_text(card), findings, actor=actor,
-                  why=why or "neurolinguistic-prose on the card's text, before it reaches the author")
+                  why=why or "neurolinguistic-prose on the card's text, before it reaches the author",
+                  verdict=verdict)
+
+
+def writer_sessions(card_id: str, sha: str) -> set:
+    """The sessions that wrote a version of this card whose text is `sha`."""
+    try:
+        import cards
+        return {l.get("session") for l in cards.versions(card_id)
+                if l.get("session") and text_sha(card_text(l.get("card") or {})) == sha}
+    except Exception:  # noqa: BLE001
+        return set()
+
+
+def other_audit(card_id: str, sha: str, known_rows=None):
+    """The newest audit of this text by a session that wrote no version of it, or None. An audit with no
+    session on record is not counted as the writer's."""
+    import vaultlog
+    writers = writer_sessions(card_id, sha)
+    gone = vaultlog.retracted_hashes()
+    last = None
+    for e in vaultlog.fold("prose.audited"):
+        if e.get("hash") in gone or e.get("sheet") != PAGE_SHEET or str(e.get("item")) != str(card_id) \
+                or e.get("text_sha") != sha:
+            continue
+        if not e.get("session") or e.get("session") not in writers:
+            last = e
+    return last
 
 
 def prose_check(card_id: str, card: dict, known: dict | None = None) -> dict:
-    """The proseCheck the page reads: ok only for an audit of this exact text."""
+    """ok only for an audit of this exact text, by a session other than the card's writer when
+    book.toml [gates] "card_cross_audit" is "refuse", and never while that audit's verdict is "finding"."""
     known = known if known is not None else audits()
     text = card_text(card)
-    got = known.get((PAGE_SHEET, str(card_id)), {}).get(text_sha(text))
-    return {"ok": bool(got) or not text.strip(), "state": card_state(card_id, card, known), "text": text,
-            "sha": text_sha(text), "audit": (got or {}).get("hash", ""),
+    sha = text_sha(text)
+    got = known.get((PAGE_SHEET, str(card_id)), {}).get(sha)
+    other = other_audit(card_id, sha) if got else None
+    self_only = bool(got) and other is None
+    if self_only and B.gate_mode("card_cross_audit") == "refuse":
+        got = None
+    found = (other or got or {}).get("verdict") == "finding"
+    if found:
+        got = None
+    state = "finding" if found else ("self-audited" if self_only else ("audited" if got
+                                                                       else card_state(card_id, card, known)))
+    return {"ok": bool(got) or not text.strip(), "state": state, "selfAudited": self_only, "text": text,
+            "sha": sha, "audit": (got or {}).get("hash", ""),
             "at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
             "tool": "prose.py"}
 
@@ -179,13 +238,23 @@ def _patch(dirpath, card_id, check):
 def main(argv) -> int:
     patch = argv[argv.index("--patch-dir") + 1] if "--patch-dir" in argv else None
     if "--record-card" in argv:
-        cid, card = _load_card(Path(argv[argv.index("--record-card") + 1]))
+        arg = argv[argv.index("--record-card") + 1]
+        if Path(arg).suffix == ".json" and Path(arg).exists():
+            cid, card = _load_card(Path(arg))
+        else:
+            import cards
+            card = cards.fold().get(arg)
+            if card is None:
+                print(f"no card file and no card {arg!r} in the store")
+                return 2
+            cid = arg
         if "--findings" not in argv:
-            print("--record-card needs --findings G.json (the fourteen principles' findings)")
+            print("--record-card needs --findings G.json (the fifteen principles' findings)")
             return 2
+        verdict = argv[argv.index("--verdict") + 1] if "--verdict" in argv else ""
         findings = json.loads(Path(argv[argv.index("--findings") + 1]).read_text(encoding="utf-8"))
         try:
-            ev = record_card(cid, card, findings)
+            ev = record_card(cid, card, findings, verdict=verdict)
         except ValueError as exc:
             print(f"NOT RECORDED: {exc}")
             return 2
@@ -198,7 +267,7 @@ def main(argv) -> int:
         try:
             cards = page_cards(src)
         except Exception as exc:                              # noqa: BLE001
-            print(f"NOT RUN: {exc}. Pass --from DIR, or save a page snapshot first.")
+            print(f"NOT RUN: {exc}. Pass --from DIR.")
             return 2
     known = audits()
     bad = 0
@@ -212,7 +281,8 @@ def main(argv) -> int:
                               "status": card.get("status", ""), "state": chk["state"],
                               "words": len(chk["text"].split())}, ensure_ascii=False))
         else:
-            mark = {"audited": "ok   ", "stale": "STALE", "unrun": "UNRUN"}[chk["state"]]
+            mark = {"audited": "ok   ", "stale": "STALE", "unrun": "UNRUN", "self-audited": "SELF ",
+                    "finding": "FOUND"}[chk["state"]]
             print(f"  {mark}  [{card.get('status', '')}] {str(card.get('title', ''))[:110]}  "
                   f"({len(chk['text'].split())} words)")
     if "--json" not in argv:

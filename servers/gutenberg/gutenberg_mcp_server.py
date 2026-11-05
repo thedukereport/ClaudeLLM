@@ -218,7 +218,11 @@ def do_search(query, subject=None, max_results=10):
     return "\n".join(out)
 
 
-def do_get(title, subject=None):
+WINDOW = 60000
+
+
+def do_get(title, subject=None, offset=0, find=None):
+    _WIN["offset"], _WIN["find"] = offset, find
     arcs = archives()
     if subject:
         s = subject.lower().strip()
@@ -264,12 +268,42 @@ def do_get(title, subject=None):
             f"or check list_subjects — the relevant subset may not be installed.")
 
 
+_WIN = {"offset": 0, "find": None}
+
+
 def _render(entry, label):
+    """One window of WINDOW characters of the book's text, from `offset`, or from the first
+    place `find` occurs at or after `offset`.
+
+    Until 2026-11-05 the text stopped at 60,000 characters and said "ask for a later section",
+    and no argument could ask for one: Barnfield's *Affectionate Shepheard*, past the cut in
+    Bullen's *Some Longer Elizabethan Poems* (556,944 characters), went unread.
+    """
     entry = _resolve(entry)
     body = strip_html(_text_of(entry))
-    if len(body) > 60000:
-        body = body[:60000] + "\n\n[... truncated — ask for a later section ...]"
-    return f"# {entry.title}\n(Project Gutenberg — {label}; public domain)\n\n{body}"
+    total = len(body)
+    try:
+        start = max(0, int(_WIN.get("offset") or 0))
+    except (TypeError, ValueError):
+        start = 0
+    find = (_WIN.get("find") or "").strip()
+    note = ""
+    if find:
+        at = body.lower().find(find.lower(), start)
+        if at < 0:
+            note = f"[\"{find}\" does not occur after character {start:,}; the window starts at {start:,}.]\n\n"
+        else:
+            start = max(0, at - 500)
+            note = f"[\"{find}\" first occurs at character {at:,}; the window starts 500 characters before it.]\n\n"
+    start = min(start, total)
+    end = min(total, start + WINDOW)
+    head = (f"# {entry.title}\n(Project Gutenberg — {label}; public domain)\n"
+            f"[Characters {start:,}–{end:,} of {total:,}.]\n\n")
+    tail = ""
+    if end < total:
+        tail = (f"\n\n[... {total - end:,} characters follow. Call get_book again with offset={end} "
+                f"for the next section, or with find=\"<words>\" to go to a passage ...]")
+    return head + note + body[start:end] + tail
 
 
 def do_list():
@@ -316,13 +350,18 @@ TOOLS = [
         "description": (
             "Return the full plain text of a Gutenberg book/page by title (as shown "
             "by search_gutenberg). Resolves redirects, falls back to fuzzy title then "
-            "full-text match. Long texts are truncated. Optional 'subject' filter."
+            "full-text match. Long texts come in sections of 60,000 characters: each answer "
+            "says which characters it gives and the offset of the next section. 'offset' starts "
+            "the section at a character; 'find' starts it just before the first place the "
+            "words occur (at or after 'offset'). Optional 'subject' filter."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "title": {"type": "string", "description": "Title, e.g. 'The Republic'"},
                 "subject": {"type": "string", "description": "Optional LCC code or subject word"},
+                "offset": {"type": "integer", "description": "Character to start the section at (default 0)"},
+                "find": {"type": "string", "description": "Words to find; the section starts just before their first occurrence"},
             },
             "required": ["title"],
         },
@@ -341,7 +380,7 @@ def handle_tools_call(params):
     if name == "search_gutenberg":
         text = do_search(a.get("query", ""), a.get("subject"), a.get("max_results", 10))
     elif name == "get_book":
-        text = do_get(a.get("title", ""), a.get("subject"))
+        text = do_get(a.get("title", ""), a.get("subject"), a.get("offset", 0), a.get("find"))
     elif name == "list_subjects":
         text = do_list()
     else:

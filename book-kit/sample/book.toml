@@ -10,3 +10,12 @@ checked_shelf = "PDF"
 
 [workflow]
 out_of_workflow = []
+
+[desk]
+port = 8766
+
+[gates]
+card_words = "warn"
+card_reads = "warn"
+card_cross_audit = "warn"
+card_refresh = "report"

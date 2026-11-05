@@ -1,38 +1,42 @@
-# The book kit — a fact-checked book, built with six Claude chats
+# The book kit — a fact-checked book, built with seven Claude chats
 
-This folder holds a working system for writing a nonfiction book with Claude: six role chats that each do one job, a review page where you rule on every proposed change, a fact-check record for every source the book cites, and about forty scripts that check the chapters before anything is locked or published. It was built on a real book over several months, and the book's own content is not in it.
+This folder holds a working system for writing a nonfiction book with Claude: role chats that each do one job, a card desk where you rule on every proposed change, a fact-check record for every source the book cites, and about fifty scripts that check each card and each chapter before anything reaches you, is locked or is published. It was built on a real book over several months, and the book's own content is not in it.
 
 The rest of this repository (the local library search and the source servers) is optional here, and it makes the fact-checking much faster: the Fact-checker reads your sources from your own disk.
 
-> **The quick way:** open Claude (Cowork, or Claude Desktop with a folder connected) and give it [`BOOTSTRAP-BOOK.md`](./BOOTSTRAP-BOOK.md). Claude asks you about your book and sets the whole thing up with you.
+> **The quick way:** open Claude Code (the desktop app's Code tab, or `claude` in a terminal) in an empty folder and give it [`BOOTSTRAP-BOOK.md`](./BOOTSTRAP-BOOK.md). Claude asks you about your book and sets the whole thing up with you.
 
 ## How the work moves
 
 ```
-            you rule in one place only
-     ┌──────────────────────────────────────┐
-     │  Source Rulings page                  │
-     │  cards: Current and     Asks tab:     │
-     │  Proposed text          questions     │
-     └───────▲──────────────────────▲───────┘
-             │ cards                │ asks
-   ┌─────────┴─────┐        ┌───────┴────────┐
-   │    Editor     │◀───────│  Fact-checker  │  reads each source, logs each read
-   └─────────┬─────┘ finds  └────────────────┘
-             │ approved cards
-   ┌─────────▼─────┐        ┌────────────────┐
-   │  Production   │        │ Managing editor│  routes the Watcher's findings,
-   │ applies, locks│        │                │  reports the schedule
-   └───────────────┘        └────────────────┘
+        you rule in one place only: the card desk, http://127.0.0.1:8766
+     ┌────────────────────────────────────────────────┐
+     │  one card at a time: Current and Proposed text │
+     │  lanes: Reopen? · Waiting for you · Approved · │
+     │  In the book · With Claude      views: Asks,   │
+     │  (cards not ready wait here)    Sources to get │
+     └───────▲──────────────────────────────▲─────────┘
+             │ cards (tools/cards.py)        │ asks
+   ┌─────────┴─────┐  audit each   ┌─────────┴──────┐
+   │    Editor     │◀─ other's  ─▶ │      QA        │  reads every sentence
+   └─────────┬─────┘  prose        └────────────────┘
+             │  ▲ findings, reads   ┌────────────────┐
+             │  └───────────────────│  Fact-checker  │  reads each source, logs each read
+             │ cleared cards        └────────────────┘
+   ┌─────────▼─────┐                ┌────────────────┐
+   │  Production   │                │ Managing editor│  routes the Watcher's findings,
+   │ applies, locks│                │                │  reports the schedule
+   └───────────────┘                └────────────────┘
         Systems keeps the tools working.   The Watcher (a scheduled task) checks each role.
 ```
 
 - **You** own the words and the claims. The text changes only when you approve a card.
 - **The Fact-checker** opens your own source for each claim, records what it says (`Fact Check/Claims/`, the chapter's ledger, the event log), and reports what it read. It never rules one source right and another wrong.
 - **The Editor** turns findings into cards: the paragraph's job, the paragraph above and below, the current text and the proposed text, in full.
-- **Production** applies the cards you approved, exactly as approved, and locks each finished chapter.
+- **QA**, the second reader, reads every sentence of a chapter for invented people, unspecified verbs, abstract nouns that act and nominalizations, builds its own cards, and audits the prose of the Editor's cards (the Editor audits QA's). A card's prose audit counts only when a session other than the writer's recorded it.
+- **Production** applies the cards the Editor clears, exactly as you approved them, and locks each finished chapter.
 - **The Managing editor** routes the Watcher's directives and tells you what is blocked and on whom.
-- **Systems** keeps the scripts, the page and the scheduled tasks working.
+- **Systems** keeps the scripts, the card desk and the scheduled tasks working.
 
 Each chat reads its rules at the start of every session, and hands its work to the next chat through a file in `Handoffs/`. You never copy messages between chats.
 
@@ -46,21 +50,22 @@ book-kit/
     book.toml.example  your settings (copy to book.toml)
     tools/             the scripts (Tools Index.md lists each one)
     tests/             their tests; each runs on a copy of the sample book
-    Methodology/       the rulebook, the six roles, each role's rules, word lists,
+    Methodology/       the rulebook, the seven roles, each role's rules, word lists,
                        the footnote plan, the close-out procedure
     Skills/            seven Claude skills (citation audit, prose lens, footnote pass, …)
-    Fact Check/        the asks queue, triage list, locks, claims, event log, protocols
+    Fact Check/        the card store (Cards/), the asks queue, triage list, locks, claims,
+                       event log, protocols
     Handoffs/          one hand-off file per role chat
     Chapters/ Appendices/ Punch List.md Project State.md Book Structure.md …
   sample/              a two-chapter practice book with four faults planted on purpose
-  page/                the Source Rulings page and how to publish it
   how-to/              step-by-step guides
 ```
 
 ## Requirements
 
 - macOS, Windows or Linux, with **Python 3.10 or newer**. The scripts use the standard library.
-- **Claude** with access to your vault folder (Cowork, or Claude Desktop with the folder connected). The review page is a claude.ai artifact, so the account needs artifacts with the database capability.
+- **Claude Code** opened in your vault folder (the Claude desktop app's Code tab, or the `claude` command in a terminal), one session per role.
+- **A browser** for the card desk, which `tools/card-desk.py` serves on your own computer at http://127.0.0.1:8766. It needs nothing beyond Python's standard library, and it answers only your own computer (127.0.0.1).
 - **Optional programs**, each named by the tool that needs it, which says so plainly when it is missing:
   - `pandoc` — `blockid.py` checks that adding block ids changes nothing in the rendered text; `publish-pdfs.sh` makes PDFs (with `xelatex`).
   - `pdfplumber` (Python) or `pdftotext` — `find-page.sh` reads page numbers from PDFs.
@@ -72,9 +77,9 @@ book-kit/
 1. Copy `vault/` to where you keep your book, and rename it. Copy `book.toml.example` to `book.toml` and fill in the title, your library folder, and the two output folders.
 2. Put your chapters in `Chapters/` as `Chapter 01 - Title.md`, `Chapter 02 - Title.md` and so on, with footnotes in Markdown (`[^slug]` in the text, `[^slug]: …` at the end of the chapter).
 3. Run `python3 tools/bookconfig.py` (it prints what it found), then `python3 tools/blockid.py --write` (block ids on each paragraph and note), then `python3 tools/smoke-test.sh`.
-4. Publish the review page: [`page/README.md`](./page/README.md). Put its URL in `book.toml`.
-5. Make one Claude project for the book, and one chat per role, each opened with its **Start** prompt from `Chat Prompts.md`. When a chat compresses, use its **Recover** prompt; when it goes wrong, **Close** it and open a new one ([`how-to/07`](./how-to/07%20When%20a%20chat%20gets%20long%20or%20compresses.md)).
-6. Practise first on the sample. From the `book-kit` folder: `BOOK_VAULT=sample python3 vault/tools/check-read.sh`. The guides in [`how-to/`](./how-to/) walk through each planted fault.
+4. Start the card desk: `python3 tools/card-desk.py`, and open http://127.0.0.1:8766. It is the one place you rule. `python3 tools/card-desk.py --check` draws every page once and says how many cards are in each lane.
+5. Open one Claude Code session per role in the vault folder, each started with its **Start** prompt from `Chat Prompts.md`. When a session compresses, use its **Recover** prompt; when it goes wrong, **Close** it and open a new one ([`how-to/07`](./how-to/07%20When%20a%20chat%20gets%20long%20or%20compresses.md)).
+6. Practise first on a copy of the sample. From the `book-kit` folder: `cp -r sample /tmp/practice`, then `BOOK_VAULT=/tmp/practice python3 vault/tools/check-read.sh`. The guides in [`how-to/`](./how-to/) walk through each planted fault.
 
 ## The rules travel with the tools
 
@@ -82,9 +87,12 @@ The rulebook in `vault/Methodology/` comes from the original author's working ru
 
 - **Read the text. A search locates; only reading decides.**
 - **Nothing is removed from the book without your approval.** A claim with no logged read goes on the back-fill list; it is never cut for want of a source.
-- **Closed is closed.** A line you approved does not come back to you; the page holds any card on it.
+- **Settled is settled, and wrong comes back as a card.** A line you approved does not come back for a better word; it comes back, whole, in the desk's Reopen? lane, when a reading shows it wrong.
 - **A card shows the words.** Current and Proposed, in full, every time.
-- **A sample before any bulk write.**
+- **You see only cards that are ready.** Every name, number, date and quotation on a card has a logged read; no banned word; a second session has audited its prose; it still reads as the chapter does. A card that fails one waits under "With Claude" with the reason.
+- **No collisions.** When a card is applied, every other open card of that chapter is refreshed from disk or sent back to its owner.
+- **Your Approve rules on the ideas.** Each approved card is still fact-checked and language-checked before it goes in.
+- **A sample before any bulk write.** Each card gate starts at "warn" and goes to "refuse" in `book.toml` `[gates]` after you have seen what it catches.
 
 ## Credit and license
 

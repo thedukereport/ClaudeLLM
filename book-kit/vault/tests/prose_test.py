@@ -4,11 +4,15 @@
 Requires:
   1. with no audit on record, every open card with text is UNRUN and the run exits 1;
      the applied card is not listed;
-  2. --record-card with fewer than fourteen principles records nothing;
-  3. --record-card with all fourteen records one prose.audited event, and that card
-     reads ok; --patch-dir writes {"proseCheck": {"ok": true, ...}} for it;
+  2. --record-card with fewer than fifteen principles records nothing;
+  3. --record-card with all fifteen, by a session that did not write the card,
+     records one prose.audited event, and that card reads ok; --patch-dir
+     writes {"proseCheck": {"ok": true, ...}} for it;
   4. after the card's paragraph is rewritten, the same card reads STALE;
-  5. reflowing the paragraph (whitespace only) keeps the audit.
+  5. reflowing the paragraph (whitespace only) keeps the audit;
+  6. an audit by the session that wrote the card reads self-audited, and with
+     book.toml [gates] card_cross_audit = "refuse" it does not pass;
+  7. an audit whose verdict is "finding" keeps the card held.
 """
 import json
 import sys
@@ -17,9 +21,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cardtest as T  # noqa: E402
 
-FOURTEEN = ("agent-visibility", "verb-priority", "negation", "quantifier", "modal", "comparison",
-            "emergence", "complex-equivalence", "mind-reading", "flourish", "telegraphing",
-            "epistemic", "actor-verb-headings", "invented-person")
+FIFTEEN = ("agent-visibility", "verb-priority", "negation", "quantifier", "modal", "comparison",
+           "emergence", "complex-equivalence", "mind-reading", "flourish", "telegraphing",
+           "epistemic", "actor-verb-headings", "invented-person", "unspecified-verbs")
 
 bad = []
 with T.sample_copy() as v:
@@ -30,18 +34,18 @@ with T.sample_copy() as v:
         bad.append(f"first run: exit {r.returncode}, {got} {r.stderr[-300:]}")
     card = T.card_path(v, T.CHOICE)
     part = v / "part.json"
-    part.write_text(json.dumps({k: "none" for k in FOURTEEN[:9]}), encoding="utf-8")
+    part.write_text(json.dumps({k: "none" for k in FIFTEEN[:9]}), encoding="utf-8")
     full = v / "full.json"
-    full.write_text(json.dumps({k: "none" for k in FOURTEEN}), encoding="utf-8")
+    full.write_text(json.dumps({k: "none" for k in FIFTEEN}), encoding="utf-8")
     events = lambda: sum(1 for f in (v / "Fact Check" / "events").glob("*.jsonl")  # noqa: E731
                          for l in f.read_text(encoding="utf-8").splitlines() if '"prose.audited"' in l)
     # 2
-    r = T.run(v, "prose.py", "--record-card", card, "--findings", part)
+    r = T.run(v, "prose.py", "--record-card", card, "--findings", part, "--verdict", "ok")
     if r.returncode != 2 or events() != 0:
         bad.append(f"a partial audit was recorded: {r.stdout[-300:]}")
     # 3
     patch = v / "patch"
-    r = T.run(v, "prose.py", "--record-card", card, "--findings", full, "--patch-dir", patch)
+    r = T.run(v, "prose.py", "--record-card", card, "--findings", full, "--verdict", "ok", "--patch-dir", patch)
     pc = json.loads((patch / f"{T.CHOICE}.json").read_text(encoding="utf-8"))["proseCheck"] \
         if (patch / f"{T.CHOICE}.json").exists() else {}
     if r.returncode != 0 or events() != 1 or not pc.get("ok"):
@@ -62,6 +66,25 @@ with T.sample_copy() as v:
     if r.returncode != 1 or [x["state"] for x in T.rows(r)] != ["stale"]:
         bad.append(f"a rewrite did not make the audit stale: {r.stdout[-300:]}")
 
+    # 6: the writer audits its own card (put_card writes as session "test-writer")
+    T.run(v, "prose.py", "--record-card", card, "--findings", full, "--verdict", "ok", session="test-writer")
+    r = T.run(v, "prose.py", "--card", card, "--json")
+    if [x["state"] for x in T.rows(r)] != ["self-audited"]:
+        bad.append(f"the writer's own audit did not read self-audited: {r.stdout[-300:]}")
+    toml = v / "book.toml"
+    saved = toml.read_text(encoding="utf-8")
+    toml.write_text(saved.replace('card_cross_audit = "warn"', 'card_cross_audit = "refuse"'), encoding="utf-8")
+    r = T.run(v, "prose.py", "--card", card)
+    if 'card_cross_audit = "refuse"' not in toml.read_text(encoding="utf-8") or r.returncode != 1:
+        bad.append("in refuse mode a self-audited card passed")
+    toml.write_text(saved, encoding="utf-8")
+    # 7
+    T.run(v, "prose.py", "--record-card", card, "--findings", full, "--verdict", "finding")
+    r = T.run(v, "prose.py", "--card", card, "--json")
+    if r.returncode != 1 or [x["state"] for x in T.rows(r)] != ["finding"]:
+        bad.append(f"an audit that found a fault let the card pass: {r.stdout[-300:]}")
+
 T.finish("prose", bad,
          "prose: unaudited cards are listed and fail; a partial audit is refused; a full audit records "
-         "one event and the card reads ok; a rewrite makes it stale; a reflow does not")
+         "one event and the card reads ok; a rewrite makes it stale; a reflow does not; the writer's own audit "
+         "is self-audited; a finding holds the card")

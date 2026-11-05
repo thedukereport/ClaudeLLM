@@ -1,10 +1,10 @@
 # Open the role chats
 
-The system is six roles. You are the Author; Claude plays the other five, one chat each, so each chat keeps to one job and starts every session from its own rules.
+The system is seven roles. You are the Author; Claude plays the other six, one session each, so each session keeps to one job and starts from its own rules.
 
-1. **Make one Claude project** for the book and attach your vault folder to it.
-2. **Make five chats** in that project and name each for its role: Fact-checker, Editor, Production, Managing Editor, Systems.
-3. **Set up `Chat Prompts.md`** in your vault: replace `<VAULT>` with the full path to your vault and `<PAGE URL>` with your review page's link.
+1. **Open Claude Code in your vault folder**: the Claude desktop app's Code tab, or `claude` in a terminal from the vault.
+2. **Open six sessions** there and name each for its role: Fact-checker, Editor, QA, Production, Managing Editor, Systems.
+3. **Set up `Chat Prompts.md`** in your vault: replace `<VAULT>` with the full path to your vault.
 4. **Open each chat** by pasting its **Start** prompt from `Chat Prompts.md`. (`Methodology/Roles.md` has a shorter "Open with" line for each role.)
 5. **One task per session.** Each Start prompt ends with "write your hand-off file and stop". When a chat compresses, goes wrong or finishes, use **Recover** or **Close**: `07 When a chat gets long or compresses.md` says which.
 
@@ -14,12 +14,14 @@ They do not, directly. Each role writes to the files it owns (the table in `Role
 
 ## Your one queue
 
-The Source Rulings page is the one place you rule.
+The card desk, http://127.0.0.1:8766 (`tools/card-desk.py`), is the one place you rule. It shows one card at a time; "Next card" takes you down the queue.
 
-- **Cards:** each with the current text and the proposed text in full. You approve, edit, or send back.
+- **Waiting for you:** each card with the current text and the proposed text in full, and the paragraphs around them. Approve it; or edit the text in the box and press "Send my edits for checking"; or write a directive. Your words are kept in your browser until you press a button.
+- **Reopen?:** a card that would change a line you already approved, in full, with "Reopen this line" and "Keep it closed". A line you approved comes back here only when a reading shows it wrong.
+- **With Claude:** the cards that are not ready, each with its reason: a fact with no logged read, a banned word, a prose audit no second session has done, a note your rules send back, a card the chapter has moved under, or your own edits waiting to be checked. You never have to rule on these.
+- **Approved, going in** and **In the book:** what Production will apply, and what it has.
 - **Asks:** questions only you can answer, each saying what happens if you say nothing. They are kept on file in `Fact Check/Asks.md`.
-- **Reopen?:** a card that would change a line you already approved, in full, with "Reopen this line" and "Keep it closed".
-- **Back-fill:** only works the library cannot produce, as "I cannot find these. Can you get them?" A cited work in the library that nobody has read yet goes to the Fact-checker to read; it never comes to you.
+- **Sources to get:** only works the library cannot produce, as "I cannot find these. Can you get them?" A cited work in the library that nobody has read yet goes to the Fact-checker to read; it never comes to you.
 
 Nothing else asks you to rule.
 

@@ -19,7 +19,7 @@ Each script in `tools/`, in its own words (its first docstring line), with who r
 | `blockid.py` | gives every block in a chapter a block id that survives editing | once after chapters are added; again for new text |
 | `blocks.py` | finds where a block of chapter text is now, by its block id | the card tools |
 | `blockedit.py` | the only way a chapter line is rewritten; it owns the block id | Production, through `apply-card.py` |
-| `apply-card.py` | Production applies one approved card from the page snapshot to its chapter | Production |
+| `apply-card.py` | Production applies one approved card from the card store to its chapter, and marks it applied | Production |
 | `show.sh` | print a manuscript line inside its context, before proposing any change | Editor, Production |
 
 ## The library and the reads
@@ -53,18 +53,22 @@ Each script in `tools/`, in its own words (its first docstring line), with who r
 | `check-crossrefs.sh` | check that each "Chapter N" cross-reference points at the right chapter | Editor; the lock check |
 | `check-glossary.sh` | check that each term of art is glossed where the reader first meets it | Editor |
 
-## Cards and the Source Rulings page
+## Cards and the card desk
 
 | Script | What it does | Run by |
 |---|---|---|
+| `cards.py` | the cards, one file (`Fact Check/Cards/cards.jsonl`), and the one way a card goes in: `list`, `show`, `counts`, `add` (with the word and read gates), `applied`, `hold`, `release` | Editor, QA, Production |
+| `card-desk.py` | the one place the author rules: a server on http://127.0.0.1:8766 that shows one card at a time, runs every gate on it, and records each press in the event log; also the Asks and Sources views. `--check` draws every page once | the author; smoke test |
+| `card_reads.py` | no card reaches the author with an unread fact in it: the names, numbers, dates and quotations in a card's passage that no opened read in `Fact Check/Claims/` holds | Editor, QA, Fact-checker; `cards.py` and the desk |
+| `card_refresh.py` | after an apply, each other open card of the chapter gets its neighbours as on disk, or goes back to its owner (`book.toml` `[gates] card_refresh`) | `cards.py applied`; Systems |
 | `cardlib.py` | the one place that says whether a card's reads are on record | imported by the card tools |
 | `card-log.py` | put the sources a card names on record, in the turn the card is written | Editor, per card |
 | `check-card-logged.py` | no card reaches the author naming a read that is not on record | Editor; smoke test |
 | `check-card-words.py` | never offer the author a banned word on a card | Editor; smoke test |
 | `check-card-notes.py` | no card reaches the author with a footnote the author's rules send back | Editor, per card (`--card`) |
-| `check-card-closed.py` | no card reaches the author on a line or note the author has already approved, except through the Reopen? view | Editor, per card (`--card`) |
-| `prose.py` | records that the neurolinguistic-prose skill ran on a card's exact text, and lists the open cards without that record | Editor, per card (`--record-card`) |
-| `dashboard-sync.py` | loads the Asks and Back-fill views of the page, reads the author's presses back, and writes the Fact-checker's reading queue (`queue`) | Systems; Fact-checker (`queue`) |
+| `check-card-closed.py` | no card reaches the author on a line or note the author has already approved, except through the desk's Reopen? lane | Editor, per card (`--card`); the desk |
+| `prose.py` | records that the neurolinguistic-prose skill ran on a card's exact text, by which session and with what verdict, and lists the open cards without an audit by a second session | QA and Editor, on each other's cards (`--record-card`) |
+| `dashboard-sync.py` | builds the card desk's Asks and Sources views, writes the author's presses there back into `Fact Check/Asks.md` and the Back-fill Queue, and writes the Fact-checker's reading queue (`queue`) | Systems; Fact-checker (`queue`) |
 
 ## Locks and output
 

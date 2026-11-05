@@ -8,9 +8,10 @@ Chapter 2 and trims [^fed1_test] to its citation. Requires:
   2. --write refuses while the card is not approved, and changes no file;
   3. --write refuses a chapter locked in Fact Check/Locks.md;
   4. --write refuses when a `current` text differs from the chapter on disk;
-  5. once approved, --write changes both lines, keeps their block ids, logs
-     edit.applied events naming the card, and writes the ledger's apply entry;
-  6. a second --write finds nothing to change.
+  5. once the author approves it on the desk, --write changes both lines, keeps
+     their block ids, logs edit.applied events naming the card, writes the
+     ledger's apply entry, and marks the card applied in the store;
+  6. a second --write refuses the applied card and changes nothing.
 """
 import json
 import re
@@ -52,7 +53,7 @@ with T.sample_copy() as v:
     if r.returncode != 1 or before != T.files(v):
         bad.append("--write applied a card the author has not approved")
 
-    T.edit_card(v, T.CHOICE, status="approved", approvedAt="2026-10-13T15:30:00Z")
+    T.press(v, T.CHOICE, "approve")
     # 3
     locks = v / "Fact Check" / "Locks.md"
     locks.write_text("# Locks\n\n| chapter | state | date | by | note |\n|---|---|---|---|---|\n"
@@ -73,6 +74,7 @@ with T.sample_copy() as v:
     if r.returncode != 1 or "differs from the chapter on disk" not in r.stdout or before != T.files(v):
         bad.append("--write applied a card whose current text differs from the chapter: " + r.stdout[-300:])
     T.edit_card(v, T.CHOICE, current=card["current"])
+    T.press(v, T.CHOICE, "approve")          # a new version needs the author's own Approve
 
     # 5
     r = T.run(v, "apply-card.py", T.CHOICE, "--write")
@@ -94,16 +96,19 @@ with T.sample_copy() as v:
     led = T.ledger(v, 2, "Reflection and Choice").read_text(encoding="utf-8")
     if f"card {T.CHOICE} applied" not in led or CHOICE not in led:
         bad.append("the ledger has no apply entry for the card")
-    if '"status": "applied"' not in r.stdout:
-        bad.append("the run did not print the page patch")
+    if "card marked applied" not in r.stdout:
+        bad.append("the run did not mark the card applied in the store")
+    st = T.run(v, "cards.py", "show", T.CHOICE)
+    if '"status": "applied"' not in st.stdout:
+        bad.append("the store does not read the card as applied: " + st.stdout[-300:])
 
     # 6
     before = T.files(v)
     r = T.run(v, "apply-card.py", T.CHOICE, "--write")
-    if r.returncode != 0 or "Nothing to change" not in r.stdout or before != T.files(v):
+    if r.returncode != 1 or "already applied" not in r.stdout or before != T.files(v):
         bad.append("a second --write changed something: " + r.stdout[-300:])
 
 T.finish("apply-card", bad,
          "apply-card: the dry run shows Current and Proposed whole and writes nothing; unapproved, locked "
          "and stale cards are refused; the approved card changes both lines, keeps the block ids, logs and "
-         "writes the ledger entry; a second run changes nothing")
+         "writes the ledger entry, and marks the card applied; a second run changes nothing")

@@ -1,6 +1,6 @@
 # Asks — questions only the author can answer
 
-The file of record for the Asks tab on the Source Rulings page, the author's one queue (`tools/dashboard-sync.py build` loads it there). Any role appends a new ask to the **Open** table in this format; the Fact-checker numbers, chases and closes it. Asks are batched and put to the author at a checkpoint, and asked once.
+The file of record for the Asks view on the card desk, the author's one queue (`tools/dashboard-sync.py build` puts it there, and `answers --write` writes the author's answers back here). Any role appends a new ask to the **Open** table in this format; the Fact-checker numbers, chases and closes it. Asks are batched and put to the author at a checkpoint, and asked once.
 
 **Kinds, and what silence means:**
 

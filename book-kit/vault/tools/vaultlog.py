@@ -127,7 +127,19 @@ KINDS = {
     # A chapter locked or unlocked, written by tools/lock.py: `chapter`,
     # `state` (locked / unlocked) and `note`; the actor is the role.
     "lock.changed",
+    # A press on the card desk the desk would not record (the card had moved on,
+    # or the press needed words and had none): `card`, `card_version`, `reason`
+    # and every word typed. A refused press leaves a trace.
+    "press.refused",
 }
+
+
+def session_id(given=None) -> str:
+    """The id of the chat that writes the event: `given`, else BOOK_SESSION, else the
+    id Claude Code sets (CLAUDE_CODE_SESSION_ID), else "". The second-session prose
+    gate reads it: an audit counts only when a session other than the card's writer
+    recorded it."""
+    return str(given or os.environ.get("BOOK_SESSION") or os.environ.get("CLAUDE_CODE_SESSION_ID") or "").strip()
 
 
 # ONE FILE PER ISO WEEK. A month of a busy book's log can pass 100 MB, and GitHub refuses a file
@@ -177,6 +189,9 @@ def append(kind: str, actor: str = "claude", **payload) -> dict:
         "prev": _last_hash(),
         **payload,
     }
+    rec["session"] = session_id(rec.get("session"))
+    if not rec["session"]:
+        rec.pop("session")
     rec["hash"] = _hash(rec)
     _READ_CACHE["key"] = None          # this process just changed the log
     line = json.dumps(rec, ensure_ascii=False) + "\n"

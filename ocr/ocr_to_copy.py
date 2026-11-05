@@ -123,6 +123,11 @@ def run(mac_path, lang, deadline):
 
     from pypdf import PdfReader, PdfWriter
     from PIL import Image
+    # The PNGs here are this runner's own renders of the book's pages, read only for their size. A book with very
+    # large pages (G. S. Kirk, *The Presocratic Philosophers*: 3,128 x 5,017 pt, 13,284 x 20,896 px at 300 DPI) is
+    # over Pillow's decompression-bomb guard, and the overlay step raised DecompressionBombError after every page
+    # had been read (2026-11-05). The guard is for images from outside; these are not.
+    Image.MAX_IMAGE_PIXELS = None
     reader, writer = PdfReader(src), PdfWriter()
     words = 0
     for i in range(1, n + 1):

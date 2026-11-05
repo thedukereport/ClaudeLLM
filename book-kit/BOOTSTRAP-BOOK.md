@@ -4,7 +4,7 @@
 
 ## 0. Learn the kit before you touch their book
 
-Read, whole: `book-kit/README.md`, `book-kit/vault/Methodology/Roles.md`, `book-kit/vault/Methodology/Standing Rules.md`, `book-kit/vault/Tools Index.md`, and `book-kit/page/README.md`. Then run the tests, which use only a copy of the practice book:
+Read, whole: `book-kit/README.md`, `book-kit/vault/Methodology/Roles.md`, `book-kit/vault/Methodology/Standing Rules.md`, `book-kit/vault/Tools Index.md`, and `book-kit/vault/Methodology/How a Card Is Built.md`. Then run the tests, which use only a copy of the practice book:
 
 ```
 cd book-kit/vault
@@ -45,23 +45,27 @@ Fill in `Book Structure.md` (one line per chapter) and `Project State.md` with t
 
 If they have a library folder: `python3 tools/have.sh "<a title they cite>"` builds the library index on its first run. Then `python3 tools/check-read.sh` lists each cited work and whether anyone has opened it. On a new book every work is UNREAD: that list is the Fact-checker's first back-fill.
 
-## 5. Publish the review page
+## 5. Start the card desk
 
-Follow `book-kit/page/README.md`: publish `page/source-rulings.html` as an artifact with the database capability, put its URL in `book.toml` under `[page] url`, and write the page's `config/page` document with their title and their out-of-workflow chapters.
+Run `python3 tools/card-desk.py` from the vault and have them open http://127.0.0.1:8766 in their browser (`[desk] port` in `book.toml` changes the port). Show them the lanes: Reopen?, Waiting for you, Approved, In the book, and With Claude, where each card that is not ready waits with its reason. Explain that each press is recorded in the event log, that a press on an older version of a card is refused and kept, and that their unsaved typing stays in the browser until they press a button. On a Mac, they can have it start at login (a launchd job running the same command); show them, and ask before you install one.
 
 ## 6. The chats
 
-Help them make one Claude project for the book, with the vault folder attached, and one chat per role, each named for its role. In `Chat Prompts.md`, replace `<VAULT>` with the vault's full path and `<PAGE URL>` with the review page's link (show them the change before you save it). Give them each role's **Start** prompt from that file to paste as the chat's first message, and walk them through `book-kit/how-to/07 When a chat gets long or compresses.md`: **Recover** after a compaction, **Close** to stop a chat cleanly, and a new chat with **Start** when a chat repeats a corrected mistake, forgets a ruling, or compacts again within minutes. Explain the one queue: the review page, with its cards and its Asks tab (questions only they can answer, kept on file in `Fact Check/Asks.md`). They never copy messages between chats; the chats pass work through `Handoffs/`.
+Help them open one Claude Code session per role in the vault folder (the desktop app's Code tab, or `claude` in a terminal), each named for its role: Fact-checker, Editor, QA, Production, Managing Editor, Systems. In `Chat Prompts.md`, replace `<VAULT>` with the vault's full path (show them the change before you save it). Give them each role's **Start** prompt from that file to paste as the chat's first message, and walk them through `book-kit/how-to/07 When a chat gets long or compresses.md`: **Recover** after a compaction, **Close** to stop a chat cleanly, and a new chat with **Start** when a chat repeats a corrected mistake, forgets a ruling, or compacts again within minutes. Explain the one queue: the card desk, with its cards and its Asks view (questions only they can answer, kept on file in `Fact Check/Asks.md`; `tools/dashboard-sync.py build` puts them on the view and `answers --write` writes their answers back). Explain the second reader: QA audits the prose of the Editor's cards and the Editor audits QA's, because a session that grades its own card passes its own faults. They never copy messages between chats; the chats pass work through `Handoffs/`.
 
-## 7. Scheduled tasks (optional, later)
+## 7. The gates
+
+Show them `[gates]` in `book.toml`. Each card gate (banned words, unread facts, the second-session prose audit, and the refresh after an apply) starts at "warn": the writing session sees the finding and the desk holds the card. After they have seen a sample of what a gate catches, they may move it to "refuse" (or "write" for `card_refresh`), and the ruling goes in `Methodology/UAT Log.md`.
+
+## 8. Scheduled tasks (optional, later)
 
 Two scheduled tasks keep the system honest once the chats are running: the **Watcher** (`Fact Check/Watcher/Watcher Protocol.md`, every few hours: checks each role's work against the rules and writes directives) and the **nightly fact-check agent** (`Fact Check/Agent Protocol.md`). Each task's prompt names its role and tells it to follow its protocol in the vault; the prompt copies no rule.
 
-## 8. Backups
+## 9. Backups
 
 If they use GitHub: `git init` in the vault, add their own private repository as `origin`, and run `tools/backup-to-github.sh --dry-run`, then `tools/backup-to-github.sh -m "First backup"`. Pushing is theirs to run. The `.gitignore` keeps PDFs, images and their library out of the repository.
 
-## 9. Practise on the sample
+## 10. Practise on the sample
 
 Before the first real card, walk them through `book-kit/how-to/03 Practise on the sample book.md`. The sample has four faults planted on purpose, and each role finds one.
 

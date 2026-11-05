@@ -2,7 +2,7 @@
 
 A chat holds a limited amount of conversation. When it fills up, Claude compresses the earlier part into a summary and keeps going. A summary keeps the gist and loses detail: the rules the chat read at the start, the rulings you gave, the exact place it stopped. The system plans for this. The hand-off files and the rule files hold what a chat needs, so a new chat can pick up the work in minutes.
 
-The prompts for each step are in `Chat Prompts.md` in your vault. Set it up once: replace `<VAULT>` with the full path to your vault and `<PAGE URL>` with your review page's link.
+The prompts for each step are in `Chat Prompts.md` in your vault. Set it up once: replace `<VAULT>` with the full path to your vault.
 
 ## Keep sessions short
 

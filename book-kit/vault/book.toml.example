@@ -18,7 +18,8 @@ claims = "Fact Check/Claims"
 events = "Fact Check/events"
 handoffs = "Handoffs"
 methodology = "Methodology"
-page_snapshot = "Handoffs/editor-tools/page-snapshot"
+cards = "Fact Check/Cards/cards.jsonl"
+desk_load = "Handoffs/editor-tools/desk-load"
 card_reads = "Handoffs/editor-tools/cards"
 punch_list = "Punch List.md"
 project_state = "Project State.md"
@@ -37,9 +38,18 @@ index_file = "Library Index.json"
 # semantic_search = "python3 ~/ClaudeLLM/rag/query_rag.py --k {k} \"{query}\""
 semantic_search = ""
 
-[page]
-# Your Source Rulings page (a claude.ai artifact). Filled in after you publish it.
-url = ""
+[desk]
+# The card desk, tools/card-desk.py: the one place you rule on a card, in your browser.
+port = 8766
+
+[gates]
+# How each card gate acts: "warn" (the writer sees it, and the card desk holds the card)
+# or "refuse" (tools/cards.py writes nothing). Each starts at warn; move one to refuse
+# after you have seen a sample of what it catches (Methodology/UAT Log.md).
+card_words = "warn"         # a banned word in the text you would approve
+card_reads = "warn"         # a name, number, date or quotation with no logged read
+card_cross_audit = "warn"   # a prose audit by the same session that wrote the card
+card_refresh = "report"     # "write": after an apply, refresh or send back the chapter's other cards
 
 [workflow]
 # Chapters no tool, card or check may touch until you say so.

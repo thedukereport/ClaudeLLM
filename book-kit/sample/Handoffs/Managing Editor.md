@@ -12,7 +12,7 @@ Keep this file under 2,000 words. History goes to a dated log file beside it, `H
 
 ## Waiting on the author
 
-<!-- Each item by the name the author sees: the card title on the page, or the ask number in Fact Check/Asks.md (the page's Asks tab). Nothing goes here that is not on the page. -->
+<!-- Each item by the name the author sees: the card title on the card desk, or the ask number in Fact Check/Asks.md (the desk's Asks view). Nothing goes here that is not on the desk. -->
 
 ## Next session, in order
 

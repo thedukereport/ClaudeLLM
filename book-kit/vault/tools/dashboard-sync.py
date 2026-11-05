@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""dashboard-sync.py — loads the Asks and Back-fill views of the Source Rulings page, and reads the author's presses there back into the files of record.
+"""dashboard-sync.py — builds the Asks and Back-fill views of the card desk, and writes the author's presses there back into the files of record.
 
     tools/dashboard-sync.py build            # write the cards to load, change nothing else
     tools/dashboard-sync.py answers          # SAMPLE: what the author's presses would write (writes nothing)
@@ -21,7 +21,7 @@ THE READING QUEUE
     queue is rebuilt from the book each time; a work leaves when its Claims
     row names a reader.
 
-    The page's Back-fill view loads only the works the library cannot
+    The card desk's Back-fill view shows only the works the library cannot
     produce, as "I cannot find it. Can you get it?"
 
 WHOSE WORDS THIS SERVES
@@ -29,8 +29,8 @@ WHOSE WORDS THIS SERVES
     The author's: "Asks need to be presented in cards, like the other
     interfaces", and "build interfaces that allow me to manage the backlog ...
     and build everything into our unified dashboard." The unified dashboard is
-    the Source Rulings page (book.toml [page] url). This tool feeds two
-    collections on it, `asks` and `backlog`, and takes the author's presses
+    the card desk (`tools/card-desk.py`, book.toml [desk] port). This tool
+    builds two of its views, Asks and Back-fill, and takes the author's presses
     back into the files of record.
 
 WHAT `build` READS AND WRITES
@@ -48,16 +48,17 @@ WHAT `build` READS AND WRITES
     shelf, and nothing here has read the shelf. Chapters listed in [workflow]
     out_of_workflow are left out.
 
-    It writes only `Handoffs/editor-tools/dashboard-load/asks.json` and
-    `backlog.json` (beside the page snapshot folder), which Claude loads into
-    the page with ArtifactData. It removes nothing anywhere: a work that is
+    It writes only `Handoffs/editor-tools/desk-load/asks.json` and
+    `backlog.json` (book.toml [paths] desk_load), which the card desk reads
+    and shows. It removes nothing anywhere: a work that is
     read drops off the next build because its Claims row exists, never because
     a card was deleted (the author's rule: "I don't want anything removed that
     I have not approved").
 
 WHAT `answers` WRITES, WITH --write ONLY
 
-    From the page snapshot (`<page snapshot>/asks/*.json`, `backlog/*.json`):
+    From the author's presses on the card desk (`decision.recorded` events
+    with `desk_view` asks or backlog):
       - an answered ask: its row moves from Open to Answered in
         `Fact Check/Asks.md`, the author's answer verbatim with the date, and a
         `decision.recorded` event, actor = [book] author_actor;
@@ -65,9 +66,9 @@ WHAT `answers` WRITES, WITH --write ONLY
         `decision.recorded` event, actor author_actor. "Approve citing it
         unread" is the author's own exception to the rule that a cited work is
         read first, and is recorded as exactly that.
-    A row a press cannot be matched to is reported and left alone. After a
-    write, Claude sets `writtenAt` on each card on the page so the next run
-    skips it.
+    A row a press cannot be matched to is reported and left alone. Each
+    press written is marked in the event log (`note.recorded`, `desk_written`)
+    so the next run skips it.
 
 ASKS.MD SHAPE
 
@@ -87,8 +88,7 @@ import citedworks as W  # noqa: E402
 
 TOOL = "tools/dashboard-sync.py"
 ASKS = B.ASKS
-OUT = B.SNAPSHOT.parent / "dashboard-load"
-SNAP = B.SNAPSHOT
+OUT = B.DESK_LOAD
 QUEUE = B.FACT / "Back-fill Queue.md"
 INDEX = B.LIBRARY_INDEX
 OUT_OF_WORKFLOW = B.OUT_OF_WORKFLOW
@@ -230,7 +230,7 @@ def cmd_build():
               f"{rel(INDEX)}; run tools/have.sh to build it. Written to {rel(OUT)}/asks.json; "
               f"nothing else changed.")
         return 0
-    # Only the works the library cannot produce go to the author's page; the rest are the reading queue's.
+    # Only the works the library cannot produce go to the author's desk; the rest are the reading queue's.
     b = [x for x in b if x["data"]["lane"] == "notondrive"]
     (OUT / "backlog.json").write_text(json.dumps(b, ensure_ascii=False, indent=1), encoding="utf-8")
     lanes = {}
@@ -248,14 +248,21 @@ ACTIONS = {"backfill": "Back-fill: read it and log it",
 
 
 def snapshot(name):
-    d = SNAP / name
+    """{id: the author's newest press} on the card desk's `name` view ("asks" or "backlog") that no run
+    of `answers --write` has written yet. The desk records each press as one `decision.recorded` event
+    (actor = [book] author_actor, `desk_view`, `desk_id`); a write records a `note.recorded` event naming
+    the press (`desk_written`), so the next run skips it."""
+    import vaultlog
+    done = {e.get("desk_written") for e in vaultlog.fold("note.recorded") if e.get("desk_written")}
     out = {}
-    if not d.is_dir():
-        return out
-    for p in sorted(d.glob("*.json")):
-        x = json.loads(p.read_text(encoding="utf-8"))
-        out[p.stem] = dict(x.get("data", x)) if isinstance(x.get("data", x), dict) else {}
-    return out
+    for e in vaultlog.fold("decision.recorded", desk_view=name):
+        if e.get("actor") != AUTHOR or not e.get("desk_id"):
+            continue
+        d = {k: e.get(k, "") for k in ("title", "chapters", "lane", "answer", "action")}
+        d.update(words=e.get("text") or "", note=e.get("text") or "", answeredAt=e.get("ts", ""),
+                 actedAt=e.get("ts", ""), _press=e.get("hash"), writtenAt="")
+        out[e["desk_id"]] = d
+    return {k: v for k, v in out.items() if v["_press"] not in done}
 
 
 def cmd_answers(write):
@@ -265,7 +272,7 @@ def cmd_answers(write):
     back = {k: v for k, v in snapshot("backlog").items() if v.get("action") and not v.get("writtenAt")
             and f"| *{v.get('title','')}* | {v.get('chapters','')} | {v.get('lane','')} | {ACTIONS.get(v['action'], v['action'])} |" not in queued}
     if asks and not ASKS.exists():
-        raise SystemExit(f"answered asks are on the page and there is no {rel(ASKS)}. Nothing written.")
+        raise SystemExit(f"the author answered asks on the card desk and there is no {rel(ASKS)}. Nothing written.")
     lines, rows = [], []
     if ASKS.exists():
         lines, rows, _ = open_rows(ASKS.read_text(encoding="utf-8"))
@@ -280,12 +287,12 @@ def cmd_answers(write):
         words = (d.get("words") or "").strip()
         his = " — ".join(x for x in (said, words) if x)
         when = (d.get("answeredAt") or "")[:16].replace("T", " ") + " UTC"
-        new = f"| `{aid}` | {c[1]} | {c[2]} | **\"{his}\"** — {B.AUTHOR} on the Source Rulings page, {when} | {today} |"
+        new = f"| `{aid}` | {c[1]} | {c[2]} | **\"{his}\"** — {B.AUTHOR} on the card desk, {when} | {today} |"
         changes.append(("ASK", aid, lines[n], new, his, d))
     for bid, d in back.items():
         changes.append(("BACK", bid, d))
     if not changes:
-        print("Nothing to write: no press on the page since the last run.")
+        print("Nothing to write: no press on the card desk since the last run.")
         return 0
     n_writes = sum(1 for c in changes if c[0] != "SKIP")
     for c in changes:
@@ -319,13 +326,11 @@ def cmd_answers(write):
                 lines[j + 1:j + 1] = ["", "| id | kind | ask | answer | written |", "|---|---|---|---|---|"]
                 k = j + 2
             lines.insert(k + 1, new)
-            vaultlog.append("decision.recorded", actor=AUTHOR, sheet="Asks", item=aid, idx=None,
-                            element=None, decision_kind="instruct" if d.get("words") else "apply",
-                            text=his, via="Source Rulings page, Asks view", ruled_on_sha="",
-                            why=f"the author's press, written into {rel(ASKS)} by {TOOL}")
+            vaultlog.append("note.recorded", actor="claude", desk_written=d["_press"], item=aid,
+                            why=f"the author's answer on the card desk, written into {rel(ASKS)} by {TOOL}")
     if any(c[0] == "ASK" for c in changes):
         vaultlog.write_file(ASKS, "\n".join(lines), tool=TOOL,
-                            why="the author's answers on the Source Rulings page, Asks view")
+                            why="the author's answers on the card desk, Asks view")
     qlines = []
     for c in changes:
         if c[0] != "BACK":
@@ -333,12 +338,10 @@ def cmd_answers(write):
         d = c[2]
         qlines.append(f"| {today} | *{d['title']}* | {d['chapters']} | {d['lane']} | "
                       f"{ACTIONS.get(d['action'], d['action'])} | {d.get('note','')} | open |")
-        vaultlog.append("decision.recorded", actor=AUTHOR, sheet="Back-fill", item=d["title"], idx=None,
-                        element=None, decision_kind="apply", text=ACTIONS.get(d["action"], d["action"])
-                        + (f" — {d['note']}" if d.get("note") else ""), via="Source Rulings page, Back-fill view",
-                        ruled_on_sha="", why=f"the author's press, written into {rel(QUEUE)} by {TOOL}")
+        vaultlog.append("note.recorded", actor="claude", desk_written=d["_press"], item=d["title"],
+                        why=f"the author's back-fill press on the card desk, written into {rel(QUEUE)} by {TOOL}")
     if qlines:
-        head = ("# Back-fill Queue — the author's presses on the Source Rulings page\n\n"
+        head = ("# Back-fill Queue — the author's presses on the card desk\n\n"
                 "Written by `tools/dashboard-sync.py`. One row per press. The Fact-checker works the "
                 "`Back-fill` rows (read, then log in `Fact Check/Claims/` and the chapter ledger) and marks "
                 "the last column done; nothing in the book is removed from here.\n\n"
@@ -346,8 +349,8 @@ def cmd_answers(write):
                 "|---|---|---|---|---|---|---|\n")
         old = QUEUE.read_text(encoding="utf-8") if QUEUE.exists() else head
         vaultlog.write_file(QUEUE, old.rstrip("\n") + "\n" + "\n".join(qlines) + "\n",
-                            tool=TOOL, why="the author's back-fill presses on the Source Rulings page")
-    print(f"\nWrote {n_writes} change(s). Set writtenAt on each card on the page so the next run skips it.")
+                            tool=TOOL, why="the author's back-fill presses on the card desk")
+    print(f"\nWrote {n_writes} change(s); each press is marked written in the event log, so the next run skips it.")
     return 0
 
 

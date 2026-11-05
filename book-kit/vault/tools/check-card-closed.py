@@ -1,10 +1,10 @@
 """check-card-closed.py — no card reaches the author on a line or note the author has already approved.
 
-    tools/check-card-closed.py                 # every open card on the page snapshot; exit 1 if any is held
+    tools/check-card-closed.py                 # every open card in the card store; exit 1 if any is held
     tools/check-card-closed.py --json          # one object per open card checked
-    tools/check-card-closed.py --card F.json   # one card document, before it is written to the page
+    tools/check-card-closed.py --card F.json   # one card document, before it goes into the store
     tools/check-card-closed.py --patch-dir D   # also write D/<card id>.json = {"closedCheck": {...}}
-    tools/check-card-closed.py --page-only     # only the closings the page can see for itself (see TWO KINDS)
+    tools/check-card-closed.py --page-only     # only the closings the cards themselves show (kinds 1 and 2)
 
 WHOSE RULE THIS IS
 
@@ -22,15 +22,15 @@ WHOSE RULE THIS IS
 
 WHAT COUNTS AS A LINE THE AUTHOR HAS APPROVED (THE CLOSED SET)
 
-    From the page (the page can see these itself and holds the card live):
+    From the cards and the author's presses on them:
       1. every card with status approved or applied: the paragraphs and notes
          it changes;
       2. every card the author pressed "Approve for the chapter" on, result
-         saved, in the page's presses collection — so a later version written
+         saved, in the event log — so a later version written
          over an approved card is caught even when the rewrite reset its
          status. A later saved press of "reopen" or "Withdraw approval" by the
          author lifts it.
-    From the event log (Fact Check/events/), which the page cannot read:
+    From the rest of the event log (Fact Check/events/):
       3. each edit.applied that names one of the author's rulings (an item, a
          page card, actor = book.toml [book] author_actor, or "ruled"/"ruling"/
          "approved"/"use my words" in its why) — the block it wrote;
@@ -56,18 +56,18 @@ WHAT IT DOES
     The ways past, both the author's own act: the card names in `reopenedBy`
     the hash of a decision.recorded event of the author's (actor author_actor)
     dated after every closing it meets; or the author pressed "Reopen this
-    line" on the card in the page's "Reopen?" lane, which saves
+    line" on the card in the card desk's "Reopen?" lane, which saves
     `lineReopenedAt` and `lineReopenText` (the text the author saw), dated
     after every closing, on a card whose text is still that text. A new
     version written over that text is held again.
 
-TWO KINDS, AND WHY THE PAGE HOLDS ONLY THE FIRST BY ITSELF
+WHERE THE HOLD HAPPENS
 
-    The page's `closedHeld()` computes kinds 1 and 2 from the cards and presses
-    it already loads, so a card the Editor writes without running this tool is
-    still held. Kinds 3 and 4 reach the page only as the `closedCheck` this
-    tool writes with --patch-dir; writing those to the page is a bulk write and
-    waits for the author's "ok" on a sample (Methodology/UAT Log.md).
+    The card desk (`tools/card-desk.py`) runs this check on every card it
+    draws, all four kinds, and puts a card that meets a closed line in its
+    "Reopen?" lane, whole, where the author's press reopens the line or keeps
+    it closed. A line the author approved still comes back when a reading shows
+    it wrong: the card goes to that lane, never round it.
 
     This tool edits nothing anywhere; --patch-dir writes files to D only.
     Chapters listed in book.toml [workflow] out_of_workflow are skipped.
@@ -157,12 +157,9 @@ def card_targets(card, book, closing=False):
 
 
 def load_presses():
-    d = C.SNAPSHOT / "presses"
-    out = []
-    for p in sorted(d.glob("*.json")) if d.exists() else []:
-        x = json.loads(p.read_text(encoding="utf-8")); x = x.get("data", x)
-        out.append(x)
-    return sorted(out, key=lambda x: x.get("at", ""))
+    """The author's presses on cards, from the event log (`cards.presses`), oldest first."""
+    import cards
+    return cards.presses()
 
 
 def approved_by_press(presses):
@@ -205,7 +202,7 @@ def closed_set(cards, book, page_only=False):
         else:
             at = press.get("at")
             said = (f'you pressed Approve on the card "{C.norm(c.get("title"))}"; '
-                    f"the card on the page now is a later version written over that approval")
+                    f"the card in the store now is a later version written over that approval")
         for b in card_targets(c, book, closing=True) | applied_by_item.get(c["id"], set()):
             closed[b].append({"kind": "page", "at": at or "", "said": said, "source": c["id"]})
     if page_only:
@@ -217,13 +214,13 @@ def closed_set(cards, book, page_only=False):
             continue  # one apply can be logged twice, once by each writer that saw it
         seen_edit.add((b, e.get("ts")))
         why = e.get("why") or ""
-        if "Source Rulings" in why:
-            continue  # a page card: kind 1 already holds it, with its title
+        if sheet_is_card(e):
+            continue  # a card: kind 1 already holds it, with its title
         sheet, item = e.get("sheet"), e.get("item")
         if not (item or e.get("actor") == AUTHOR or RULED.search(why)):
             continue
-        if sheet == "Source Rulings" or (item and str(item) in byid):
-            continue  # a page card: kind 1 already holds it, with its title
+        if item and str(item) in byid:
+            continue  # a card: kind 1 already holds it, with its title
         where = f"{sheet} item {item}" if sheet and item else (f"item {item}" if item else "a chapter line")
         closed[b].append({"kind": "log", "at": e.get("ts", ""), "source": e.get("hash", ""),
                           "said": f"your ruling on {where}, applied {e.get('ts','')[:10]}: {why[:160]}"})
@@ -235,6 +232,10 @@ def closed_set(cards, book, page_only=False):
             closed[book.note[(ch, slug)]].append({"kind": "log", "at": e.get("ts", ""), "source": e.get("hash", ""),
                                                   "said": f"your note ruling \"leave it\" on [^{slug}], {e.get('ts','')[:10]}"})
     return closed
+
+
+def sheet_is_card(e):
+    return e.get("sheet") in ("cards", "Source Rulings") or "Source Rulings card" in (e.get("why") or "")
 
 
 def his_reopening(h):
@@ -305,8 +306,8 @@ def main(argv):
             print(json.dumps({k: v for k, v in r.items() if k not in ("text", "_all")}, ensure_ascii=False))
     else:
         skipped = ", ".join(str(n) for n in sorted(OUT_OF_WORKFLOW)) or "none"
-        print(f"Page snapshot taken {taken.isoformat(timespec='minutes')}; {len(results)} open card(s) checked"
-              f"{' (page closings only)' if page_only else ''}; chapters out of the workflow, skipped: {skipped}.\n")
+        print(f"{len(results)} open card(s) checked"
+              f"{' (closings from the cards only)' if page_only else ''}; chapters out of the workflow, skipped: {skipped}.\n")
         for r in held:
             print(f"HELD  {r['title']}  [{r['status']}]")
             for f in r["findings"]:

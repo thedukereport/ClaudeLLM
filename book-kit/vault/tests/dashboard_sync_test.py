@@ -2,10 +2,10 @@
 """dashboard_sync_test.py — tools/dashboard-sync.py on a copy of the sample vault.
 
 Requires:
-  1. `build` writes only the dashboard-load files; an ask naming Ch02/L5 comes
+  1. `build` writes only the desk-load files; an ask naming Ch02/L5 comes
      with that line's text and the paragraph before it;
   2. with no library index, `build` writes no back-fill cards and says so;
-     with an index holding Common Sense, the page gets only The Federalist
+     with an index holding Common Sense, the desk gets only The Federalist
      Papers (NOT IN THE LIBRARY); Common Sense (in the library, unread) goes
      to the Fact-checker's reading queue instead, and `queue` without
      --write writes only its sample;
@@ -13,8 +13,9 @@ Requires:
   4. with --write, an answered ask leaves Open and lands in Answered with the
      author's words;
   5. a back-fill press becomes one row in Back-fill Queue.md;
-  6. each press is one decision.recorded event, actor = the author's actor;
-  7. a second run with the same snapshot changes nothing.
+  6. each press is one decision.recorded event, actor = the author's actor, and
+     the write adds no second one;
+  7. a second run with the same presses changes nothing.
 """
 import json
 import sys
@@ -40,7 +41,7 @@ ASKS = """# Asks
 bad = []
 with T.sample_copy() as v:
     (v / "Fact Check" / "Asks.md").write_text(ASKS, encoding="utf-8")
-    load = v / "Handoffs" / "editor-tools" / "dashboard-load"
+    load = v / "Handoffs" / "editor-tools" / "desk-load"
 
     # 1 and 2
     before = T.files(v)
@@ -48,7 +49,7 @@ with T.sample_copy() as v:
     if r.returncode != 0 or "Traceback" in r.stderr:
         bad.append("build failed: " + (r.stdout + r.stderr)[-500:])
     changed = {p for p in set(T.files(v)) ^ set(before)} | {p for p in before if T.files(v).get(p) != before[p]}
-    if {p.relative_to(v).as_posix() for p in changed} != {"Handoffs/editor-tools/dashboard-load/asks.json"}:
+    if {p.relative_to(v).as_posix() for p in changed} != {"Handoffs/editor-tools/desk-load/asks.json"}:
         bad.append(f"build with no index wrote {sorted(str(p.relative_to(v)) for p in changed)}")
     if "back-fill: NOT BUILT" not in r.stdout:
         bad.append("build with no library index did not say the back-fill was not built")
@@ -77,13 +78,10 @@ with T.sample_copy() as v:
         if "### *Common Sense*" not in txt.split("## 2.")[0] or "how it came into the book:" not in txt:
             bad.append("the reading queue sample lacks Common Sense in part 1 with how it came into the book")
 
-    s = v / T.SNAP_REL
-    (s / "asks").mkdir(parents=True, exist_ok=True)
-    (s / "backlog").mkdir(exist_ok=True)
-    (s / "asks" / "A1.json").write_text(json.dumps(
-        {"answer": "ok", "words": "TEST WORDS", "answeredAt": "2026-01-01T00:00:00Z"}))
-    (s / "backlog" / "bf-test.json").write_text(json.dumps(
-        {"title": "Test Work", "chapters": "Ch02", "lane": "unread", "action": "backfill", "note": ""}))
+    T.desk_press(v, "asks", "A1", sheet="Asks", item="A1", answer="ok", text="TEST WORDS",
+                 decision_kind="answer")
+    T.desk_press(v, "backlog", "bf-test", sheet="Back-fill", item="Test Work", title="Test Work",
+                 chapters="Ch02", lane="unread", action="backfill", text="", decision_kind="source")
 
     # 3
     before = T.files(v)

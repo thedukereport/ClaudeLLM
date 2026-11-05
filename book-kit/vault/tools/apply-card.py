@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
-"""apply-card.py — Production applies one approved card from the page snapshot to its chapter.
+"""apply-card.py — Production applies one approved card from the card store to its chapter.
 
     tools/apply-card.py CARD_ID            # dry run: prints Current and Proposed in full, writes nothing
     tools/apply-card.py CARD_ID --write    # applies the card, writes the ledger's apply entry
     tools/apply-card.py path/to/card.json  # a card document instead of an id
 
-    CARD_ID is the card's document id on the Source Rulings page; the card is
-    read from `<page snapshot>/proposals/<CARD_ID>.json` (book.toml [paths]
-    page_snapshot).
+    CARD_ID is the card's id in `Fact Check/Cards/cards.jsonl` (`tools/cards.py`);
+    the card is read as it stands now, with the author's presses folded in.
 
 WHAT IT DOES
 
     The card's text is `reviewedPara` (the text Claude checked and the author
-    approved), split into segments at the page's separator (a line holding
+    approved), split into segments at the card separator (a line holding
     only ⁂), plus `reviewedNote` when the card has a note box. Segment k pairs
     with the card's `current[k]`:
 
@@ -30,8 +29,9 @@ WHAT IT DOES
         the chapter has none, goes in after the chapter's last footnote.
 
     Then it writes an apply entry at the end of the chapter's ledger, reads
-    back every line it wrote, and prints the patch for the card on the page
-    (status applied), which Claude writes with ArtifactData.
+    back every line it wrote, and marks the card applied in the store
+    (`cards.mark_applied`: one `edit.applied` event), which also refreshes or
+    sends back every other open card of the chapter (`tools/card_refresh.py`).
 
 IT REFUSES THE WHOLE CARD, AND WRITES NOTHING, WHEN
 
@@ -42,12 +42,11 @@ IT REFUSES THE WHOLE CARD, AND WRITES NOTHING, WHEN
       author's decision;
     - the chapter is in book.toml [workflow] out_of_workflow;
     - (--write only) the card's status is not approved, its text differs from
-      the text Claude checked, the snapshot is over 24 hours old, or the
-      chapter has no single ledger.
+      the text Claude checked, or the chapter has no single ledger.
 
 WHY
 
-    The author approves a card on the page; the change reaches the chapter
+    The author approves a card on the card desk; the change reaches the chapter
     only when somebody applies it. Every chapter write goes through
     `blockedit`, which owns the block id: in the system this kit comes from,
     text pasted into a chapter without its id left the block index, and a
@@ -72,7 +71,6 @@ SEP = "\n\n⁂\n\n"
 BID = re.compile(r"(?:\bblock\s+|\bb:)([0-9a-f]{6})\b")
 INSERT = re.compile(r"goes? after|go after|^\s*after\b|new lines? go|between L\d+", re.I)
 NOTEDEF = re.compile(r"^\s*\[\^([A-Za-z0-9_\-]+)\]:")
-MAX_AGE_H = 24
 LOCKED, UNLOCKED = "🔒", "🔓"
 
 
@@ -109,12 +107,11 @@ def load(arg):
         d = json.loads(p.read_text(encoding="utf-8"))
         d = dict(d.get("data", d))
         return d.get("id") or p.stem, d, None
-    f = C.SNAPSHOT / "proposals" / f"{arg}.json"
-    if not f.exists():
-        raise SystemExit(f"REFUSED: no card {arg!r} in {C.rel(C.SNAPSHOT)}/proposals/. "
-                         f"Take a fresh snapshot of the page, or check the id.")
-    d = json.loads(f.read_text(encoding="utf-8"))
-    return arg, dict(d.get("data", d)), C.snapshot_taken()
+    import cards
+    d = cards.fold().get(arg)
+    if d is None:
+        raise SystemExit(f"REFUSED: no card {arg!r} in {C.rel(B.CARD_STORE)}. Check the id: tools/cards.py list")
+    return arg, d, d.get("_version")
 
 
 def plan(cid, card):
@@ -215,10 +212,9 @@ def plan(cid, card):
     return changes, refusals, notes
 
 
-def ledger_entry(cid, card, taken, done, day):
-    page = "the Source Rulings page" + (f" ({B.PAGE_URL})" if B.PAGE_URL else "")
-    src = (f"read from the page snapshot taken {taken.isoformat(timespec='minutes')}" if taken
-           else "read from a card file")
+def ledger_entry(cid, card, version, done, day):
+    page = f"the card desk ({B.DESK_URL})"
+    src = (f"version {version} in {C.rel(B.CARD_STORE)}" if version else "read from a card file")
     approved = (f"The author approved it {card['approvedAt']}." if card.get("approvedAt")
                 else "No approval time is recorded on the card.")
     lines = [f"## {day} — card {cid} applied: {C.norm(card.get('title')) or cid}", "",
@@ -262,13 +258,12 @@ def main(argv):
     if len(args) != 1:
         print(__doc__)
         return 2
-    cid, card, taken = load(args[0])
+    cid, card, version = load(args[0])
     title = C.norm(card.get("title")) or cid
     status = card.get("status", "")
     print(f"CARD {cid} — {title}  [status: {status or 'none'}]")
-    if taken:
-        age = (datetime.datetime.now(datetime.timezone.utc) - taken).total_seconds() / 3600
-        print(f"Page snapshot taken {taken.isoformat(timespec='minutes')}, {age:.1f} hours ago.")
+    if version:
+        print(f"Version {version} in {C.rel(B.CARD_STORE)}.")
     if status == "applied":
         print("\nREFUSED: this card is already applied. Nothing written.")
         return 1
@@ -276,7 +271,7 @@ def main(argv):
     hold = []
     if status != "approved":
         hold.append(f"the card's status is {status or 'none'}; --write applies only a card the "
-                    f"author approved on the page")
+                    f"author approved on the card desk")
     if card.get("reviewedPara") is not None and card.get("proposedPara") is not None \
             and card.get("reviewedPara") != card.get("proposedPara"):
         hold.append("the text in the card's box differs from the text Claude checked "
@@ -284,9 +279,8 @@ def main(argv):
     if not card.get("noteless") and (card.get("reviewedNote") or "") != (card.get("proposedNote") or "") \
             and card.get("reviewedNote") is not None:
         hold.append("the footnote in the card's box differs from the note Claude checked")
-    if taken and (datetime.datetime.now(datetime.timezone.utc) - taken).total_seconds() / 3600 > MAX_AGE_H:
-        hold.append(f"the snapshot is over {MAX_AGE_H} hours old; the author may have withdrawn the "
-                    f"approval since. Read the page again into {C.rel(C.SNAPSHOT)}/")
+    if not version:
+        hold.append("a card file is not the card the author approved: --write applies a card from the store")
     ch = C.chapter_of(card)
     ledger = None
     try:
@@ -306,7 +300,7 @@ def main(argv):
     print()
     show(changes)
     day = C.today_utc()
-    entry = ledger_entry(cid, card, taken, changes, day)
+    entry = ledger_entry(cid, card, version, changes, day)
     print("=" * 72)
     print(f"LEDGER ENTRY, appended to {C.rel(ledger) if ledger else '(no ledger)'}\n")
     print("\n".join("  " + l for l in entry.splitlines()))
@@ -323,19 +317,19 @@ def main(argv):
 
     import blockedit
     import vaultlog
-    why = (f'Source Rulings card {cid} "{title}", approved by the author '
+    why = (f'card {cid} "{title}", approved by the author '
            f'{card.get("approvedAt") or ""}; applied by {TOOL}').strip()
     done, last_after = [], {}
     try:
         for c in [x for x in changes if x["kind"] == "replace"]:
             blockedit.replace(c["block"].id, c["new"], why=why, actor=B.AUTHOR_ACTOR,
-                              sheet="Source Rulings", item=cid)
+                              sheet="cards", item=cid)
             done.append(c)
             print(f"CHANGED  {c['label']}")
         for c in [x for x in changes if x["kind"] == "insert"]:
             after = last_after.get(c["anchor"].id, c["anchor"].id)
             rec = blockedit.insert_after(after, c["new"], why=why, actor=B.AUTHOR_ACTOR,
-                                         sheet="Source Rulings", item=cid)
+                                         sheet="cards", item=cid)
             c["new_id"] = rec.get("block_id", "")
             last_after[c["anchor"].id] = c["new_id"] or after
             done.append(c)
@@ -345,7 +339,7 @@ def main(argv):
         print(f"Written before the stop: {len(done)} of {len(changes)}. Each is in the event log "
               f"with its before and after, and the chapter was copied aside before each write.")
         return 1
-    entry = ledger_entry(cid, card, taken, done, day)
+    entry = ledger_entry(cid, card, version, done, day)
     before = ledger.read_text(encoding="utf-8")
     sep = "" if before.endswith("\n\n") else ("\n" if before.endswith("\n") else "\n\n")
     vaultlog.write_file(ledger, before + sep + entry, tool=TOOL, why=f"apply entry for card {cid}")
@@ -364,12 +358,16 @@ def main(argv):
     if bad:
         print("\nWRITTEN, BUT THE READ-BACK FAILED:\n  " + "\n  ".join(bad))
         return 1
-    now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
-    patch = {"status": "applied", "appliedAt": now,
-             "appliedNote": f"Applied by {TOOL}; ledger entry in {C.rel(ledger)}."}
-    print(f"\nApplied and read back: {len(done)} change(s); ledger entry in {C.rel(ledger)}.")
-    print(f"Next: update proposals/{cid} on the page with ArtifactData (action update), data:")
-    print(json.dumps(patch, ensure_ascii=False))
+    import cards
+    edits = [e for e in vaultlog.fold("edit.applied") if str(e.get("item")) == cid and not e.get("card")]
+    try:
+        h = cards.mark_applied(cid, version, edit_event=(edits[-1].get("hash") if edits else "blockedit"),
+                               by="Production")
+    except cards.Refused as e:
+        print(f"\nApplied and read back, but the card is NOT marked applied: {e}")
+        return 1
+    print(f"\nApplied and read back: {len(done)} change(s); ledger entry in {C.rel(ledger)}; "
+          f"card marked applied (edit.applied {h}).")
     return 0
 
 

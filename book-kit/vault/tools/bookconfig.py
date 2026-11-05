@@ -8,6 +8,8 @@
     B.chapter_number(path)   5 for "Chapter 05 - Title.md"
     B.ledger_file(5)         the chapter's fact-check ledger (one, or it stops)
     B.claims_file(5)         Fact Check/Claims/Ch 05.jsonl
+    B.CARD_STORE             Fact Check/Cards/cards.jsonl, the cards (tools/cards.py)
+    B.gate_mode("card_reads")   "warn" or "refuse", from book.toml [gates]
     B.coord(5, 112)          "Ch05/L112"
 
 WHERE THE SETTINGS COME FROM
@@ -95,7 +97,7 @@ CONFIG = _load()
 _book = CONFIG.get("book", {})
 _paths = CONFIG.get("paths", {})
 _lib = CONFIG.get("library", {})
-_page = CONFIG.get("page", {})
+_desk = CONFIG.get("desk", {})
 _wf = CONFIG.get("workflow", {})
 _out = CONFIG.get("output", {})
 
@@ -123,8 +125,9 @@ CLAIMS = _vpath("claims", "Fact Check/Claims")
 EVENTS = _vpath("events", "Fact Check/events")
 HANDOFFS = _vpath("handoffs", "Handoffs")
 METHODOLOGY = _vpath("methodology", "Methodology")
-SNAPSHOT = _vpath("page_snapshot", "Handoffs/editor-tools/page-snapshot")
 CARDS = _vpath("card_reads", "Handoffs/editor-tools/cards")
+CARD_STORE = _vpath("cards", "Fact Check/Cards/cards.jsonl")   # every card version, one line each
+DESK_LOAD = _vpath("desk_load", "Handoffs/editor-tools/desk-load")   # what dashboard-sync.py builds for the desk
 WORD_LISTS = METHODOLOGY / "Word Lists.md"
 ASKS = FACT / "Asks.md"
 LOCKS = FACT / "Locks.md"
@@ -144,10 +147,21 @@ LIBRARY_ROOTS = [_abs(p) for p in _lib.get("roots", [])]   # a relative root is 
 CHECKED_SHELF = _lib.get("checked_shelf", "")   # a subfolder you have checked by hand, read first
 LIBRARY_INDEX = FACT / _lib.get("index_file", "Library Index.json")
 
-PAGE_URL = _page.get("url", "")
+DESK_PORT = int(_desk.get("port", 8766))
+DESK_URL = f"http://127.0.0.1:{DESK_PORT}"
 OUT_OF_WORKFLOW = set(int(x) for x in _wf.get("out_of_workflow", []))
 PDF_OUT = _abs(_out["pdf_dir"]) if _out.get("pdf_dir") else None
 SNAPSHOT_DEST = _abs(_out["snapshot_dir"]) if _out.get("snapshot_dir") else None
+
+
+GATES = CONFIG.get("gates", {})
+
+
+def gate_mode(key, default="warn"):
+    """How a card gate acts, from book.toml [gates]: "warn" (the writer sees the finding, the card
+    goes in, and the card desk holds it) or "refuse" (the card does not go in). Every gate starts at
+    "warn" and goes to "refuse" on the author's ok to a sample (Methodology/UAT Log.md)."""
+    return GATES.get(key, default)
 
 
 def is_backup(p) -> bool:
@@ -203,5 +217,5 @@ if __name__ == "__main__":
     print(f"chapters     {CHAPTERS}  ({len(chapter_files())} files)")
     print(f"fact check   {FACT}")
     print(f"library      {library_root() or 'none found of ' + str([str(r) for r in LIBRARY_ROOTS])}")
-    print(f"page         {PAGE_URL or '(not set)'}")
+    print(f"card desk    {DESK_URL}  (tools/card-desk.py); cards in {CARD_STORE}")
     print(f"out of workflow: {sorted(OUT_OF_WORKFLOW) or 'none'}")

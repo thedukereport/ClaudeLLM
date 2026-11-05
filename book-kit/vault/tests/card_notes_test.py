@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """card_notes_test.py — tools/check-card-notes.py refuses a note that argues, and passes a citation.
 
-On a copy of the sample vault and its page snapshot. Requires:
+On a copy of the sample vault and its card store. Requires:
   1. card (b), which proposes [^fed1_test] with its sentence of interpretation
      and changes no paragraph, is refused, and the finding names that sentence;
   2. card (d), whose note is citation only, passes;

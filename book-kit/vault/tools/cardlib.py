@@ -7,10 +7,9 @@
 
 WHY THIS EXISTS
 
-    Cards on the Source Rulings page (a claude.ai artifact, collection
-    `proposals`; its address is `[page] url` in book.toml) are written by the
-    Editor through the chat. No script in the vault can open that page, so no
-    check could see whether a source a card names had reached
+    Cards live in `Fact Check/Cards/cards.jsonl` (`tools/cards.py`) and the
+    author rules on them at the card desk (`tools/card-desk.py`). Without a
+    check, nothing showed whether a source a card names had reached
     `Fact Check/Claims/Ch NN.jsonl`, the chapter's ledger, and a `source.read`
     event in `Fact Check/events/`. The author's rule: "A read that is not
     logged did not happen, because the next pass will do it again."
@@ -31,8 +30,8 @@ WHAT A CARD'S READ LIST IS
          "reads": [ {author, title, drive_path, location, states, ref, ...} ]}
 
     Each read uses the field names `Fact Check/Claims/*.jsonl` already uses.
-    `drive_path` is the file's path in the library. The card id is the page's
-    document id.
+    `drive_path` is the file's path in the library. The card id is its id in
+    the card store.
 
 HOW "ALREADY LOGGED" IS DECIDED, STATED SO NOBODY HAS TO READ THE CODE
 
@@ -60,12 +59,11 @@ FACT = B.FACT
 CLAIMS = B.CLAIMS
 EVENTS = B.EVENTS
 CARDS = B.CARDS
-SNAPSHOT = B.SNAPSHOT
 # Cards the Editor owes a read list for, one card id per line ("#" starts a
 # comment). Work owed, never permission: a card not listed fails the day it
 # appears.
 BACKLOG = CARDS.parent / "card-log-backlog.txt"
-PAGE = B.PAGE_URL or "(the page's address is not set: [page] url in book.toml)"
+PAGE = B.DESK_URL
 
 REQUIRED = ("author", "title", "location", "ref")
 CHECKED_STATUSES = ("yours", "submitted", "approved")
@@ -196,7 +194,7 @@ def ledger_section(card: dict, day: str, rows: list, source: str = "") -> str:
     source = source or rel(CARDS / (card["card"] + ".reads.json"))
     claims = rel(claims_file(ch))
     lines = [heading(card, day), "",
-             f"Card on the Source Rulings page ({PAGE}), id `{card['card']}`. "
+             f"Card on the card desk ({PAGE}), id `{card['card']}`. "
              f"Logged by `tools/card-log.py` for the Editor, from "
              f"`{source}`.", ""]
     for read, ln, is_new in rows:
@@ -216,42 +214,17 @@ def today_utc() -> str:
     return datetime.datetime.now(datetime.timezone.utc).date().isoformat()
 
 
-def _doc(p: Path) -> dict:
-    """One document from the snapshot. A file holds the document's fields, or
-    wraps them in "data" beside its id and version; both are read."""
-    d = json.loads(p.read_text(encoding="utf-8"))
-    return dict(d.get("data", d)) if isinstance(d.get("data", d), dict) else {}
-
-
-def snapshot_taken():
-    """The UTC time written in the snapshot's TAKEN file, or raises."""
-    taken = SNAPSHOT / "TAKEN"
-    if not taken.exists():
-        raise FileNotFoundError(
-            f"no page snapshot at {rel(SNAPSHOT)}/ — the page has "
-            f"not been read, so no card was checked")
-    when = datetime.datetime.fromisoformat(taken.read_text().strip().replace("Z", "+00:00"))
-    if when.tzinfo is None:
-        when = when.replace(tzinfo=datetime.timezone.utc)
-    return when
-
-
-def snapshot_collection(name: str) -> dict:
-    """{doc id: fields} for one collection of the snapshot ({} when absent)."""
-    d = SNAPSHOT / name
-    if not d.is_dir():
-        return {}
-    return {p.stem: _doc(p) for p in sorted(d.glob("*.json"))}
+def store_cards():
+    """[card dict with 'id'] for every card in the store, as it stands now: the newest version of
+    each, with the author's presses and Production's applies folded in (`tools/cards.py fold`)."""
+    import cards
+    return [dict(c, id=cid) for cid, c in cards.fold().items()]
 
 
 def snapshot_cards():
-    """(taken_at, [card dict with 'id']) from the page snapshot, or raises."""
-    when = snapshot_taken()
-    cards = []
-    for cid, data in snapshot_collection("proposals").items():
-        data["id"] = cid
-        cards.append(data)
-    return when, cards
+    """(now, store_cards()). The name is from the retired review page, whose cards the tools read
+    from a snapshot; the cards are read live from the store now, so the time is always now."""
+    return datetime.datetime.now(datetime.timezone.utc), store_cards()
 
 
 def backlog() -> set:

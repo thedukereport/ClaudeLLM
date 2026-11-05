@@ -11,7 +11,7 @@ It's two things working together:
 
 ## Also here: a book kit
 
-[`book-kit/`](./book-kit/) is a system for writing a non-fiction book with Claude. It sets up six role chats (Editor, Fact-checker, Production, Managing editor, Systems, and you as the author), a review page where you approve each change before it goes into a chapter, tools that log each source Claude reads and flag any citation nobody has read, and a two-chapter practice book with mistakes planted on purpose for you to find.
+[`book-kit/`](./book-kit/) is a system for writing a non-fiction book with Claude. It sets up seven roles (Editor, QA, Fact-checker, Production, Managing editor, Systems, and you as the author), a card desk on your own computer where you approve each change before it goes into a chapter, tools that log each source Claude reads and flag any citation nobody has read, and a two-chapter practice book with mistakes planted on purpose for you to find.
 
 Start with [`book-kit/README.md`](./book-kit/README.md), or give Claude [`book-kit/BOOTSTRAP-BOOK.md`](./book-kit/BOOTSTRAP-BOOK.md) and it will set the kit up with you. The kit works on its own; Claude can also use the servers in this repository as reference sources while it checks the book.
 
@@ -23,7 +23,7 @@ You don't need to follow the guides by hand. **Open Claude Cowork (or Claude Des
 
 ## New: the book kit — fact-checking and editing a nonfiction book with Claude
 
-[`book-kit/`](./book-kit/) is a working system for writing a nonfiction book with Claude: six roles in separate chats (Author, Fact-checker, Editor, Production, Managing Editor, Systems), a review page where the author approves every change to the text, a fact-check record where every source read is logged, language and footnote checks, chapter locks, and backups. It searches your own library, so it works best alongside the RAG above, and runs without it.
+[`book-kit/`](./book-kit/) is a working system for writing a nonfiction book with Claude: seven roles in separate Claude Code sessions (Author, Fact-checker, Editor, QA, Production, Managing Editor, Systems), a card desk on the author's own computer where the author approves every change to the text, gates that hold back any card with an unread fact, a banned word or a prose audit no second session has done, a fact-check record where every source read is logged, language and footnote checks, chapter locks, and backups. It searches your own library, so it works best alongside the RAG above, and runs without it.
 
 Start with [`book-kit/README.md`](./book-kit/README.md). To have Claude set it up with you, give it [`book-kit/BOOTSTRAP-BOOK.md`](./book-kit/BOOTSTRAP-BOOK.md). A two-chapter sample book with four planted faults, and the guides that walk through it, are in [`book-kit/sample/`](./book-kit/sample/) and [`book-kit/how-to/`](./book-kit/how-to/).
 
@@ -39,8 +39,7 @@ servers/             ← the MCP servers, each with its build script
   pleiades/    wikipedia/  wikispooks/  gutenberg/  atlas/  astrology/  wordnet/
   chronography/  cuneiform/  wiktionary/
 dashboard/           ← optional macOS control panel (author's example)
-book-kit/            ← a system for writing a book with Claude (see its README)
-book-kit/            ← the book kit: roles, rules, checks, review page, sample book, guides
+book-kit/            ← the book kit: roles, rules, checks, card desk, sample book, guides
 ```
 
 **No texts are included.** Every `build_*.py` / `download_*.py` fetches its corpus from the original source, on *your* machine, at build time. This keeps the repo small and keeps each corpus under its own license.

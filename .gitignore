@@ -45,3 +45,13 @@ Thumbs.db
 rag_config.json
 english-wordnet*.xml*
 *.xml.gz
+
+# Local test archives of the event log (2026-10-19); not part of the repository.
+vlt-test*.tgz
+
+# The sample book's two public-domain texts (Project Gutenberg) belong in the kit.
+!book-kit/sample/library/PDF/
+!book-kit/sample/Fact Check/Cards/cards.jsonl
+
+# The library index have.sh builds in each vault (the sample's included); each user builds their own.
+Library Index.json

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """card_closed_test.py — tools/check-card-closed.py holds a card on a line the author approved, and passes the rest.
 
-On a copy of the sample vault and its page snapshot. Requires:
+On a copy of the sample vault and its card store. Requires:
   1. card (c), on the Chapter 1 paragraph the applied card (a) changed, is
      held, and the finding names card (a) by its title;
   2. cards (b) and (d), on lines nobody approved, pass;
@@ -12,7 +12,7 @@ On a copy of the sample vault and its page snapshot. Requires:
   5. the author's decision.recorded named in reopenedBy, dated after the
      closing, lets (d) through;
   6. a chapter in book.toml [workflow] out_of_workflow is skipped;
-  7. --card checks one card file against the snapshot.
+  7. --card checks one card file against the store.
 """
 import datetime
 import json
@@ -62,21 +62,16 @@ with T.sample_copy() as v:
     if r.returncode != 1 or len(T.rows(r)) != 1:
         bad.append(f"--card on card (c) did not hold exactly that card: {r.stdout[-300:]}")
 
-    # 3. presses
-    presses = v / T.SNAP_REL / "presses"
-
-    def press(action, at):
-        (presses / f"{at.replace(':', '-')}_{T.CHOICE}_{action}.json").write_text(json.dumps(
-            {"card": T.CHOICE, "title": "t", "button": action, "action": action, "at": at,
-             "result": "saved", "reason": ""}), encoding="utf-8")
-    press("approve", "2026-10-13T16:00:00.000Z")
+    # 3. presses: an Approve on card (d), then a new version written over it
+    T.press(v, T.CHOICE, "approve")
+    T.edit_card(v, T.CHOICE, review="a later version written over the approval")
     _, got = results(v)
     if got.get(T.CHOICE, {}).get("ok", True):
-        bad.append("a saved Approve press on card (d) did not hold it")
-    press("reopen", "2026-10-13T16:05:00.000Z")
+        bad.append("a saved Approve press on card (d) did not hold the version written over it")
+    T.press(v, T.CHOICE, "reopen")
     _, got = results(v)
     if not got.get(T.CHOICE, {}).get("ok"):
-        bad.append(f"a later saved reopen press did not lift the hold: {got.get(T.CHOICE)}")
+        bad.append(f"a later reopen press did not lift the hold: {got.get(T.CHOICE)}")
 
     # 4. an edit.applied by the author on (d)'s paragraph
     log(v, "vaultlog.append('edit.applied', actor=B.AUTHOR_ACTOR, block_id='3204ff', "
@@ -93,7 +88,7 @@ with T.sample_copy() as v:
     # after the closing it lifts.
     import time
     time.sleep(1.1)
-    h = log(v, "e = vaultlog.append('decision.recorded', actor=B.AUTHOR_ACTOR, sheet='Source Rulings', "
+    h = log(v, "e = vaultlog.append('decision.recorded', actor=B.AUTHOR_ACTOR, sheet='cards', "
                "item='ch02-reflection-choice', text='reopen this line'); print(e['hash'])")
     T.edit_card(v, T.CHOICE, reopenedBy=h)
     _, got = results(v)
@@ -108,7 +103,7 @@ with T.sample_copy() as v:
     if T.ON_CLOSED in got:
         bad.append("a card in an out-of-workflow chapter was checked")
 
-# The author's "Reopen this line" press on the page passes the card for the text the author saw, and only that text.
+# The author's "Reopen this line" press on the card desk passes the card for the text the author saw, and only that text.
 with T.sample_copy() as v:
     c = T.card_path(v, T.ON_CLOSED)
     d = json.loads(c.read_text(encoding="utf-8"))
@@ -117,7 +112,7 @@ with T.sample_copy() as v:
     NOW = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     T.edit_card(v, T.ON_CLOSED, lineReopenedAt=NOW, lineReopenText=seen)
     if T.run(v, "check-card-closed.py", "--card", c).returncode != 0:
-        bad.append("a card the author reopened with the page's press is still held")
+        bad.append("a card the author reopened with the desk's press is still held")
     T.edit_card(v, T.ON_CLOSED, proposedPara=seen + " One sentence more.", reviewedPara=seen + " One sentence more.")
     if T.run(v, "check-card-closed.py", "--card", c).returncode != 1:
         bad.append("a version written over the author's reopen press was not held again")

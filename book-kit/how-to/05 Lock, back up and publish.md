@@ -10,7 +10,7 @@ python3 tools/lock.py unlock 5 --by production --note "the author approved card 
 python3 tools/lock.py lock 5 --by production     # refuses until check-lock-ready passes
 ```
 
-`tools/check-lock-ready.sh 5` blocks a lock on: open Punch List items naming the chapter, open cards for it on the page, a cited work nobody has opened (`check-read.sh --strict`), unruled banned words or epistemic flags, footnotes over the cap or structurally broken, wrong cross-references, and a missing or stale preflight (`tools/preflight.sh 5`). A sub-check that crashes is a failure, never a pass. The full sequence is in `Methodology/Chapter Close-Out Procedure.md`: unlock, edit, relock, push.
+`tools/check-lock-ready.sh 5` blocks a lock on: open Punch List items naming the chapter, open cards for it in the card store, a cited work nobody has opened (`check-read.sh --strict`), unruled banned words or epistemic flags, footnotes over the cap or structurally broken, wrong cross-references, and a missing or stale preflight (`tools/preflight.sh 5`). A sub-check that crashes is a failure, never a pass. The full sequence is in `Methodology/Chapter Close-Out Procedure.md`: unlock, edit, relock, push.
 
 ## Back up to GitHub
 

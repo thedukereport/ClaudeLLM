@@ -25,7 +25,7 @@ WHY THIS EXISTS
 A CHAPTER IS LOCK-READY WHEN, AND ONLY WHEN
 
     1. no open Punch List line (`- [ ]`) names it (ChNN, Ch. N, Chapter N);
-    2. no card for it on the review page snapshot is still open
+    2. no card for it in the card store is still open
        (status yours, submitted or approved);
     3. `check-read.sh NN --strict` passes: the chapter cites no work nobody
        opened. The author: "It's against the rules for you to cite anything
@@ -79,7 +79,7 @@ except SystemExit as e:
     sys.exit(2)
 
 TOOLS = Path(__file__).resolve().parent
-OPEN_CARD = ("yours", "submitted", "approved")
+OPEN_CARD = ("yours", "submitted", "approved", "held")
 TIMEOUT = 300
 
 
@@ -107,28 +107,18 @@ def card_chapter(card: dict):
 
 
 def open_cards(n):
-    """(problems, notes). Open cards on the page snapshot for chapter n."""
-    d = B.SNAPSHOT / "proposals"
-    if not d.is_dir():
-        if B.PAGE_URL:
-            return [f"no page snapshot at {d.relative_to(B.VAULT)}; the open cards cannot be "
-                    f"seen, so this condition has not been checked"], []
-        return [], ["no review page set in book.toml and no page snapshot; no cards to check"]
+    """(problems, notes). Open cards in the card store for chapter n, as they stand now."""
+    import cards
+    try:
+        now = cards.fold()
+    except cards.Refused as e:
+        return [f"the card store could not be read ({e}); an unreadable card is not a closed one"], []
     out = []
-    for f in sorted(d.glob("*.json")):
-        try:
-            card = json.loads(f.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as e:
-            out.append(f"card {f.name} could not be read ({e}); an unreadable card is not a closed one")
-            continue
+    for cid, card in sorted(now.items()):
         if card_chapter(card) == n and str(card.get("status", "")).lower() in OPEN_CARD:
-            out.append(f"card {f.stem} [{card.get('status')}] {card.get('where', '')} "
+            out.append(f"card {cid} [{card.get('status')}] {card.get('where', '')} "
                        f"{str(card.get('title', ''))[:90]}")
-    notes = []
-    taken = d.parent / "TAKEN"
-    if taken.exists():
-        notes.append(f"page snapshot taken {taken.read_text(encoding='utf-8').strip()}")
-    return out, notes
+    return out, []
 
 
 def run(script, *args):
@@ -282,7 +272,7 @@ def check(n):
     cards, cnotes = open_cards(n)
     notes += cnotes
     if cards:
-        blocks.append((f"{len(cards)} open card(s) on the review page:", cards))
+        blocks.append((f"{len(cards)} open card(s) in the card store:", cards))
     for name, res in (("the read rule", check_read(n)),
                       ("banned words", check_counts("check-banned-words.sh", n, label)),
                       ("epistemics", check_counts("check-epistemics.sh", n, label)),

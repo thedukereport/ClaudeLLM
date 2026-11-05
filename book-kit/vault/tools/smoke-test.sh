@@ -59,6 +59,10 @@ TOOLS_SAFE = [
     ("check-card-notes.py", [], True),
     ("check-card-closed.py", ["--page-only"], True),
     ("prose.py", [], True),
+    ("cards.py", ["counts"], False),
+    ("card_reads.py", ["--summary"], True),
+    ("card_refresh.py", [], True),
+    ("card-desk.py", ["--check"], False),
     ("lock.py", ["status"], False),
     ("uat.py", ["status"], False),
 ]

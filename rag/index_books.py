@@ -913,12 +913,25 @@ def run_incremental(args, cache_dir, dry_run=False):
         indexer = RAGIndexer(model_name=args.model)
         # Extract ONLY the new/changed books (inline, one at a time — a handful,
         # so no parallel worker swarm that could exhaust memory). Cache them.
+        no_text = []
         for fp in sorted(reprocess):
+            res = None
             if not is_cached(cache_dir, fp):
-                extract_one((fp, cache_dir, True))  # extracts + writes cache
+                res = extract_one((fp, cache_dir, True))  # extracts + writes cache
             text = read_cached_text(cache_dir, fp)
             if text and text.strip():
                 indexer.add_document(fp, text, {"file": fp, "title": titles.get(fp, Path(fp).stem)})
+            else:
+                no_text.append((fp, res))
+        # A BOOK THAT GIVES NO TEXT LEAVES THE INDEX IN SILENCE. 2026-11-05: Dilts, *Roots of
+        # Neuro-Linguistic Programming*, renamed on 2026-10-28, dropped out under its old name, and its extraction
+        # under the new name failed once with no word in this log; Lippmann the same. Each is named here, with the
+        # extractor's status, so a failure is seen and the next run retries it.
+        if no_text:
+            print(f"\n⚠ {len(no_text)} book(s) gave no text and are not in the index (retried on the next run):")
+            for fp, res in no_text:
+                why = (res[1] + (": " + "; ".join(res[2])[:160] if res[2] else "")) if res else "cached as empty"
+                print(f"   {Path(fp).name[:90]}  [{why}]")
         if indexer.chunks:
             add_emb = indexer.generate_embeddings()
             add_meta = indexer.metadata

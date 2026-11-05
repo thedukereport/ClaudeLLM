@@ -10,7 +10,7 @@ Requires, each a way this tool could go wrong:
   5. A second --write run finds nothing to do.
   6. check-card-logged.py passes the logged cards and fails an unlogged one.
   7. More than five changes are refused with no UAT acceptance line.
-The two cards are the sample snapshot's Chapter 2 cards (b) and (d); card (c)
+The two cards are the sample's Chapter 2 cards (b) and (d); card (c)
 in Chapter 1 has no read list.
 """
 import json

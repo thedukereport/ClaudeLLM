@@ -117,6 +117,18 @@ def _extract_pdf(path):
                 t = page.extract_text()
                 if t:
                     text.append(t)
+    except Exception as exc:  # noqa: BLE001
+        # PDFPLUMBER CANNOT PARSE EVERY FILE POPPLER READS. Zahra Newby, *Greek Myths in Roman Art and Culture*:
+        # the original's page tree holds a non-dictionary entry (AttributeError 'PSKeyword' … 'objid'), and its
+        # repaired copy raises KeyError 'N' past page 60, while pdftotext reads all 417 pages (926,974 characters).
+        # Such a book cached nothing and was never indexed (2026-11-05). pdftotext's text is the
+        # fallback, and the fault is kept with the warnings.
+        import subprocess
+        r = subprocess.run(["pdftotext", "-enc", "UTF-8", str(path), "-"], capture_output=True)
+        if r.returncode != 0 or not r.stdout.strip():
+            raise
+        msgs.append(f"pdfplumber failed ({type(exc).__name__}: {str(exc)[:120]}); text from pdftotext")
+        text = [r.stdout.decode("utf-8", "ignore")]
     finally:
         lg.removeHandler(handler)
     return "\n".join(text), sorted(set(msgs))

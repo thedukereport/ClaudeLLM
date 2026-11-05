@@ -34,4 +34,4 @@ The author: *"How do you want to manage these? Best practice."*
 
 ## The status report
 
-Once per session the Managing Editor tells the author, in this order: the count of cards waiting on the page; the count of open asks in `Fact Check/Asks.md`; the days left to the ship date in `Project State.md`; what is blocked and on whom; the count of commits waiting to be pushed. Each count is measured in the turn it is reported (core §3, "A number is a claim").
+Once per session the Managing Editor tells the author, in this order: the count of cards waiting on the card desk (`tools/cards.py counts`, and the desk's lanes); the count of open asks in `Fact Check/Asks.md`; the days left to the ship date in `Project State.md`; what is blocked and on whom; the count of commits waiting to be pushed. Each count is measured in the turn it is reported (core §3, "A number is a claim").

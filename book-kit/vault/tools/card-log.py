@@ -5,8 +5,8 @@
     tools/card-log.py --write CARD.reads.json [...]                   # writes
 
     CARD.reads.json lives in Handoffs/editor-tools/cards/ (book.toml
-    [paths] card_reads) and is named for the card's id on the Source Rulings
-    page. Its shape is in tools/cardlib.py.
+    [paths] card_reads) and is named for the card's id in the card store
+    (`tools/cards.py`). Its shape is in tools/cardlib.py.
 
 WHAT IT WRITES, FOR EACH READ THE CARD NAMES
 
@@ -23,8 +23,7 @@ WHAT IT WRITES, FOR EACH READ THE CARD NAMES
 
 WHY
 
-    The Source Rulings page lies outside every gate a script can run. The
-    author's rule: "Every read, every zero, every correction, to Fact
+    The author's rule: "Every read, every zero, every correction, to Fact
     Check/Claims/Ch NN.jsonl and source.read in the event log. A read that is
     not logged did not happen." In the system this kit comes from, cards that
     said their reads were logged had them in Claims and in neither the ledger
@@ -111,7 +110,7 @@ def event_payload(card: dict, read: dict) -> dict:
     p = {k: C.norm(read.get(k)) for k in ("author", "title", "location", "ref")}
     p["card"] = card["card"]
     p["drive_path"] = C.norm(read.get("drive_path"))
-    p["why"] = (f"named on card \"{C.norm(card['title'])}\", Source Rulings page; "
+    p["why"] = (f"named on card \"{C.norm(card['title'])}\", card desk; "
                 f"logged by {TOOL}")
     return p
 

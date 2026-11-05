@@ -117,7 +117,7 @@ The lock gate catches what is about to be sealed; the agent catches what is alre
 | | Owns | Writes |
 |---|---|---|
 | **Fact-check agent** (this file, serving the Fact-checker) | claims, sources, prose, glosses, attribution, leaks in the body, note faults reported as rows | Findings Register, Asks, chapter ledgers, Claims rows, Agent Run Log, `_Agent State.json`, the rulings files, `Handoffs/Fact-checker.md` (its section only) |
-| **Editor** | footnote content, through cards built from the author's per-note rulings | the Source Rulings page, `Handoffs/Editor.md` |
+| **Editor** | footnote content, through cards built from the author's per-note rulings | the card desk (through `tools/cards.py`), `Handoffs/Editor.md` |
 | **`tools/check-lock-ready.sh`** | the lock boundary | stdout only |
 
 - The author can fire the agent early, pause it, or change its schedule.

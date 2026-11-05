@@ -6,9 +6,9 @@
 
 WHAT IT CHECKS
 
-    Each card on the Source Rulings page whose status is yours, submitted or
-    approved, read from the page snapshot (book.toml [paths] page_snapshot,
-    by default `Handoffs/editor-tools/page-snapshot/`). For each one:
+    Each card in the card store (`Fact Check/Cards/cards.jsonl`, read through
+    `tools/cards.py` with the author's presses folded in) whose status is
+    yours, submitted or approved. For each one:
 
       NO READ LIST   no `<card reads folder>/<card id>.reads.json`
       NO CLAIMS ROW  a read in the list has no row in `Fact Check/Claims/Ch NN.jsonl`
@@ -20,21 +20,15 @@ WHAT IT CHECKS
     Fix any of the first four with `tools/card-log.py`. "Already logged" is
     decided in `tools/cardlib.py` and nowhere else.
 
-WHAT IT CANNOT SEE, SAID BEFORE ANY RESULT
-
-    No script can open the page. The snapshot is what a chat last read with
-    the ArtifactData tool (`list`, collection `proposals`, `out_dir` set to the
-    snapshot folder) and copied here, with the time in `TAKEN`. A snapshot over
-    24 hours old fails the check: a surface that did not run is not a surface
-    that found nothing ("Every anomaly gets a contingency").
+WHAT IT LEAVES OUT
 
     Applied cards are not checked. Their reads belong to the ledger's apply
     entry, which `tools/apply-card.py` writes.
 
 WHY
 
-    The Source Rulings page lies outside every gate a script can run. The
-    backlog file is work owed, never permission: a card not on it fails the
+    A read that is not logged did not happen, because the next pass will do
+    it again. The backlog file is work owed, never permission: a card not on it fails the
     day it appears.
 """
 import datetime
@@ -45,29 +39,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cardlib as C  # noqa: E402
 
-MAX_AGE_H = 24
 
 
 def main(argv):
     as_json = "--json" in argv
     out = []
-    try:
-        taken, cards = C.snapshot_cards()
-    except FileNotFoundError as e:
-        out.append({"check": "check-card-logged", "kind": "NO SNAPSHOT",
-                    "where": "—", "card": "", "detail": str(e)})
-        return finish(out, as_json, header="no snapshot")
-    now = datetime.datetime.now(datetime.timezone.utc)
-    if taken.tzinfo is None:
-        taken = taken.replace(tzinfo=datetime.timezone.utc)
-    age_h = (now - taken).total_seconds() / 3600
-    header = (f"Page snapshot taken {taken.isoformat(timespec='minutes')}, "
-              f"{age_h:.1f} hours ago, {len(cards)} cards.")
-    if age_h > MAX_AGE_H:
-        out.append({"check": "check-card-logged", "kind": "STALE SNAPSHOT",
-                    "where": "—", "card": "",
-                    "detail": f"the snapshot is {age_h:.0f} hours old; read the "
-                              f"page again into {C.rel(C.SNAPSHOT)}/"})
+    cards = C.store_cards()
+    header = f"{len(cards)} cards in {C.rel(C.B.CARD_STORE)}."
     owed = C.backlog()
     events = C.source_read_events()
     checked = applied = 0
@@ -131,7 +109,7 @@ def finish(out, as_json, header):
         kinds = {}
         for o in out:
             kinds.setdefault(o["kind"], []).append(o)
-        for k in ("NO SNAPSHOT", "STALE SNAPSHOT", "BAD READ LIST", "NO READ LIST",
+        for k in ("BAD READ LIST", "NO READ LIST",
                   "NO CLAIMS ROW", "NO LEDGER", "NO EVENT", "OWED"):
             rows = kinds.get(k, [])
             if not rows:

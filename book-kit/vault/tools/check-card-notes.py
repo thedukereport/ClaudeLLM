@@ -1,24 +1,21 @@
 """check-card-notes.py — no card reaches the author with a footnote the author's rules send back.
 
-    tools/check-card-notes.py                 # every card on the page snapshot; exit 1 if any is refused
+    tools/check-card-notes.py                 # every card in the card store; exit 1 if any is refused
     tools/check-card-notes.py --json          # one object per card that proposes a footnote
-    tools/check-card-notes.py --card F.json   # one card document, before it is written to the page
+    tools/check-card-notes.py --card F.json   # one card document, before it goes into the store
     tools/check-card-notes.py --patch-dir D   # also write D/<card id>.json = {"noteCheck": {...}}
-                                              # for each card checked, to merge into the card on the page
 
-THE PAGE'S HALF OF THE GATE
+WHERE THE HOLD HAPPENS
 
-    The Source Rulings page holds a card that proposes a footnote when its
-    `noteCheck` failed, when its text changed after the check, or when it was
-    written after the page's note-gate time with no check (`noteGateFrom` in
-    the page's `config` document; page function `noteHeld()`, called by
-    `stage()`). A held card shows under "With Claude" with the findings and no
-    Approve button. So the card-writing step is: build the card, run this with
-    --card, merge its noteCheck into the card, write the card.
+    The card desk (`tools/card-desk.py`) runs `check_card` on every card it
+    draws, and holds a card whose note this check refuses under "With Claude",
+    with the findings and no Approve button. So the card-writing step is:
+    build the card, run this with --card, fix what it finds, then
+    `tools/cards.py add`.
 
 WHOSE RULES THESE ARE
 
-    The author's: "Wire the note check into the Source Rulings page so every
+    The author's: "Wire the note check into the review page so every
     card's note is checked before it reaches me." A note navigates; it does
     not argue. The rules are the piles `assess-notes.py` sorts a note's
     sentences into (CITATION, WARNING, REPEATS, CONTENT, JUDGEMENT), the rule against saying a thing twice (a note does not repeat what
@@ -240,7 +237,7 @@ def main(argv):
     else:
         if taken:
             skipped = ", ".join(str(n) for n in sorted(OUT_OF_WORKFLOW)) or "none"
-            print(f"Page snapshot taken {taken.isoformat(timespec='minutes')}; {len(results)} cards propose a footnote "
+            print(f"{len(results)} cards propose a footnote "
                   f"(chapters out of the workflow, skipped: {skipped}).\n")
         for r in bad:
             print(f"REFUSED  {r['title']}  [{r['status']}]")

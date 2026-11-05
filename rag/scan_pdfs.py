@@ -137,17 +137,39 @@ def save_manifest(out_dir, files):
     tmp.replace(p)  # atomic — a crash mid-write never corrupts the manifest
 
 
+def ocr_copy(path):
+    """The '- OCR' copy beside a scanned PDF, if one exists (added 2026-10-22).
+
+    The convention: OCR goes to a NEW copy named '<stem> - OCR.pdf' (or
+    '<stem> OCR.pdf'); the original is never overwritten. A flagged original
+    with such a copy needs no work, so the report lists it apart."""
+    p = Path(path)
+    for name in (f"{p.stem} - OCR.pdf", f"{p.stem} OCR.pdf", f"{p.stem}-OCR.pdf"):
+        q = p.with_name(name)
+        if q.exists():
+            return str(q)
+    return None
+
+
 def write_report(out_dir, files, scanned_now, skipped, total):
     problems = {p: rec for p, rec in files.items() if rec["status"] == "problem"}
+    covered = {p: ocr_copy(p) for p in problems}
+    covered = {p: q for p, q in covered.items() if q}
+    open_problems = {p: rec for p, rec in problems.items() if p not in covered}
     report = Path(out_dir) / "problem_pdfs.txt"
     with open(report, "w") as f:
-        f.write(f"# {len(problems)} of {total} PDFs had issues — {time.ctime()}\n")
+        f.write(f"# {len(open_problems)} of {total} PDFs had issues — {time.ctime()}\n")
         f.write(f"# This run: {scanned_now} scanned, {skipped} skipped (unchanged per manifest).\n")
         f.write("# These triggered pdfminer warnings or failed to parse.\n")
-        f.write("# Text may still extract partially; consider re-sourcing them.\n\n")
-        for path, rec in sorted(problems.items()):
+        f.write("# Text may still extract partially; consider re-sourcing them.\n")
+        f.write(f"# {len(covered)} more flagged originals have an ' - OCR' copy beside them; listed at the end.\n\n")
+        for path, rec in sorted(open_problems.items()):
             f.write(f"{path}\n    {'; '.join(rec['msgs'])}\n")
-    return report, len(problems)
+        if covered:
+            f.write("\n# Flagged originals with an OCR copy (no work needed):\n")
+            for path, q in sorted(covered.items()):
+                f.write(f"#   {path}\n#     -> {Path(q).name}\n")
+    return report, len(open_problems)
 
 
 def main():

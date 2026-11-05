@@ -1,6 +1,6 @@
 ---
 name: neurolinguistic-prose
-description: "Two-pass editorial lens for linguistically exact prose in your book, with two mandatory gates. Mechanism Gate: before proposing prose for any causal chain or process, write the chain out in chat, name every class of person, source each link, and get it confirmed. Pre-Edit Gate: before any prose-change Edit, produce the subject-scan table. Then audit for twelve violations (abstract-noun agency, nominalizations, negation-led framing, false universals, smuggled modals, unanchored comparatives, emergence language, Complex Equivalence, Mind Reading, Rhetorical Flourish, Telegraphing, Epistemic Framing) plus abstraction by omission, actor-verb headings and the invented-person check, under Sweep Scope rules. Principle 12 tests falsifiability first: a claim no document could break is a story, and \"may\" replaces \"probably.\" Use whenever Claude writes prose for the book, or when the user asks for \"precise writing,\" \"clean prose,\" \"no AI slop,\" or mentions linguistic precision, nominalization, or agency in writing."
+description: "Two-pass editorial lens for linguistically exact prose in your book, with two mandatory gates. Mechanism Gate: before proposing prose for any causal chain or process, write the chain out in chat, name every class of person, source each link, and get it confirmed. Pre-Edit Gate: before any prose-change Edit, produce the subject-scan table. Then audit for twelve violations (abstract-noun agency, nominalizations, negation-led framing, false universals, smuggled modals, unanchored comparatives, emergence language, Complex Equivalence, Mind Reading, Rhetorical Flourish, Telegraphing, Epistemic Framing) plus abstraction by omission, actor-verb headings, the invented-person check and unspecified verbs, under Sweep Scope rules. Principle 12 tests falsifiability first: a claim no document could break is a story, and \"may\" replaces \"probably.\" Use whenever Claude writes prose for the book, or when the user asks for \"precise writing,\" \"clean prose,\" \"no AI slop,\" or mentions linguistic precision, nominalization, or agency in writing."
 ---
 
 # Neurolinguistic Prose
@@ -127,7 +127,7 @@ The patterns below share a single root: **they let abstractions act instead of p
 
 ## Twelve Principles (for the Editorial Pass)
 
-Read through the draft and check for each of these. When you find a violation, fix it with minimal disruption to the surrounding prose. Principles 12b, 13 and 14 follow the twelve and are checked in the same pass.
+Read through the draft and check for each of these. When you find a violation, fix it with minimal disruption to the surrounding prose. Principles 12b, 13, 14 and 15 follow the twelve and are checked in the same pass.
 
 ### 1. Agent Visibility
 
@@ -360,6 +360,23 @@ writer|clerk|agent|colonist|delegate|merchant|printer)\b
 
 **A hit is a coordinate, not a verdict.** In the original project that pattern returned 21 hits on one chapter, of which 4 were violations; the rest were a drafted instrument's own legal terms, quoted material, and design specifications. Read every hit before ruling.
 
+### 15. Unspecified Verbs
+
+The author, asking of the prose check: *"Did we add invented people, unspecified verbs, abstract nouns, and nominalizations to the prose check?"* A verb that does not say what was done hides the act as an abstract noun hides the actor. Two shapes:
+
+- **UV1, a verb that does not say what was done:** covered, compromised, managed, handled, addressed, dealt with, engaged, processed, failed, targeted, shaped, influenced, involved, facilitated. Ask what the person did, to whom, with what, on what date: "the press covered the story" → "the *Times* ran four front-page stories in May 1972."
+- **UV2, a passive that hides who acted:** "is being waged", "were called", "has been trained". Ask by whom, and name them, or mark the agentless passive as deliberate under *Passive Voice* below.
+
+**The test:** for each verb, could a reader film it? "Signed", "wrote", "paid", "fired" can be filmed; "handled", "managed", "addressed" cannot. Each verb that cannot is replaced by the act the record shows, or the sentence says the record does not show it. Quotations keep their words.
+
+**Worked rules from the system this kit comes from**, each applied in every chapter once the author ruled it:
+
+- **A list of acts gets its actors.** Each entry names who does it ("the council excludes; the bishops excommunicate; the prosecutors charge"), not a list of nouns for acts.
+- **A circle, method or boundary never acts.** The sentence names the person who builds it or the people who follow it.
+- **A verdict says whose it is.** "In Hamilton's account …", never a verdict in no one's voice.
+- **Companies, agencies and governments act only as legal persons.** An entity stays the subject for the acts a legal person does in law (owns, contracts, sues, is chartered, is dissolved). For acts only people do (decide, suppress, know, say, hide), the sentence names the people: named people where the record gives them, otherwise its executives, staff or officials.
+- **"This book" never acts.** "This author" does.
+
 ---
 
 ## Sweep Scope (governs every mechanical check in this skill)
@@ -422,6 +439,7 @@ After completing the draft, walk through it:
    - **Principle 12b — Abstraction by Omission:** For every sentence that refers to a concept, a book, a person or an earlier identification: is it named, or is there a pointer a reader can follow? Run `tools/check-glossary.sh NN` for the glossary half; read for the rest.
    - **Principle 13 — Actor-Verb Headings:** Every heading: actor and verb, or an exemption named. Does the heading name what the whole section does?
    - **Principle 14 — Invented Person:** Run the Shape B pattern. Read every hit. For each: real class, quoted material, legal term of art, design spec, marked hypothetical — or a fabrication that needs naming, de-peopling, or replacing with the real class and its real number.
+   - **Principle 15 — Unspecified Verbs:** Read each verb. UV1: could a reader film it? UV2: each passive, by whom? Name the act and the actor, or mark a deliberate agentless passive. Then hold the text to the worked rules under Principle 15.
 
 3. **Banned-word check (separate from principles):** Run `tools/check-banned-words.sh NN` against the banned-word list in `Methodology/Word Lists.md` (per-word carve-outs are part of each entry). Each hit gets a finding line with line number, surrounding context, and the proposed replacement or rationale for keeping (e.g., quoted material, technical term of art).
 
@@ -461,6 +479,7 @@ After completing the draft, walk through it:
    Principle 12b (Abstraction by Omission): N instances; check-glossary.sh: [result]
    Principle 13 (Actor-Verb Headings): N of M headings pass; exemptions applied at ...
    Principle 14 (Invented Person): N hits from the Shape B pattern; V violations; carve-outs at ...
+   Principle 15 (Unspecified Verbs): UV1 N, UV2 N; fixed at ...; deliberate passives at ...
    Banned-word check: N hits after carve-outs; fixed at L[x]; left L[y] (quoted material)
    Mechanical sweeps: openers [result]; redundancy [result]; cross-section sources [result]; tics [result]; double-close [result]; referent-drift [result]
    Footnote audit: per-footnote findings as above

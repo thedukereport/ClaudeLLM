@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """card_words_test.py — the banned-word check on card text, on a copy of the sample vault.
 
-Replaces the copy's page snapshot with six made-up cards and writes the
+Replaces the copy's card store with six made-up cards and writes the
 copy a one-word list (the `carry` family, as the starter list has it), so the
 test measures the card check and not the list's contents. Requires:
   1. a banned word in the card's own proposed text is reported;
@@ -12,11 +12,10 @@ test measures the card check and not the list's contents. Requires:
   5. an applied card is not read at all;
   6. the reviewed text is read in place of the proposed text when set;
   7. with no word list the check says it did not run (exit 2).
-And on the sample snapshot itself: card (c) removes "carries" and offers no
+And on the sample's own cards: card (c) removes "carries" and offers no
 banned word, and the applied card (a), whose text holds "carries", is not read.
 """
 import json
-import shutil
 import sys
 from pathlib import Path
 
@@ -46,17 +45,13 @@ with T.sample_copy() as v:
 
     r = T.run(v, "check-card-words.py", "--json")
     if "Traceback" in r.stderr:
-        bad.append("check-card-words crashed on the sample snapshot:\n" + r.stderr[-800:])
+        bad.append("check-card-words crashed on the sample cards:\n" + r.stderr[-800:])
     hits = {x["card"] for x in T.rows(r)}
     if hits:
-        bad.append(f"the sample snapshot's cards were reported: {sorted(hits)}")
+        bad.append(f"the sample's cards were reported: {sorted(hits)}")
 
-    props = v / T.SNAP_REL / "proposals"
-    shutil.rmtree(props)
-    props.mkdir()
-    for cid, d in CARDS.items():
-        d = dict(d, title=f"Ch 01 · test {cid}", where="Ch01/L1", chapter="Ch 01")
-        (props / f"{cid}.json").write_text(json.dumps(d), encoding="utf-8")
+    T.replace_store(v, {cid: dict(d, title=f"Ch 01 · test {cid}", where="Ch01/L1", chapter="Ch 01")
+                        for cid, d in CARDS.items()})
     r = T.run(v, "check-card-words.py", "--json")
     if "Traceback" in r.stderr:
         bad.append("check-card-words crashed:\n" + r.stderr[-800:])

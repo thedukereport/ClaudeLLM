@@ -3,7 +3,7 @@
 You can have Claude do all of this with you: give it `../BOOTSTRAP-BOOK.md`. These are the same steps, by hand.
 
 1. **Copy the template.** Copy `book-kit/vault/` to where you keep your book and rename it (for example `My Book Vault`). This folder is your "vault": chapters, fact-check records, rules, hand-offs and tools live together in it.
-2. **Settings.** Copy `book.toml.example` to `book.toml`. Fill in `[book] title`, `[library] roots` (the folder that holds the books and articles you cite) and, if you have a subfolder you have checked by hand, `checked_shelf`. Leave `[page] url` empty for now. Run:
+2. **Settings.** Copy `book.toml.example` to `book.toml`. Fill in `[book] title`, `[library] roots` (the folder that holds the books and articles you cite) and, if you have a subfolder you have checked by hand, `checked_shelf`. Leave `[desk]` and `[gates]` as they are for now. Run:
    ```
    python3 tools/bookconfig.py
    ```
@@ -22,4 +22,4 @@ You can have Claude do all of this with you: give it `../BOOTSTRAP-BOOK.md`. The
    ```
 6. **Fill in** `Book Structure.md` (one line per chapter) and `Project State.md`.
 
-Next: publish the review page (`../page/README.md`), then open the role chats (`02 Open the role chats.md`).
+Next: start the card desk, `python3 tools/card-desk.py`, and open http://127.0.0.1:8766 in your browser; then open the role chats (`02 Open the role chats.md`).

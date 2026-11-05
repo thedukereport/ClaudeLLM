@@ -106,7 +106,7 @@ This sweep also reads the *target*: verifying a pointer can find unrelated scaff
 
 Each step above this one finds work and puts it on a card. Each step below locks the chapter. In the original system nothing in between moved the author's answer into the manuscript: hundreds of answered items never reached a chapter file, and over a hundred more reached the file with nobody marking them applied.
 
-**Before the gate,** Production applies each approved card for the chapter with `tools/apply-card.py`, which reads the card from the page snapshot and writes through `tools/blockedit.py`, and marks it applied on the page with an apply entry in the ledger. A card the author answered with words after "ok" is work, and it goes back to the Editor for a new version; it is never applied as it stands.
+**Before the gate,** Production applies each approved card for the chapter with `tools/apply-card.py`, which reads the card from the card store and writes through `tools/blockedit.py`, marks it applied in the store with an apply entry in the ledger, and refreshes or sends back the chapter's other open cards (`tools/card_refresh.py`). A card the author answered with words after "ok" is work, and it goes back to the Editor for a new version; it is never applied as it stands.
 
 **The mark is the point.** A card with status `applied` is what takes it off both queues, and what `tools/check-lock-ready.sh` reads. An edit made without the mark looks exactly like work nobody did.
 
@@ -121,7 +121,7 @@ tools/check-lock-ready.sh NN
 It looks at:
 
 - **open Punch List items** naming the chapter (`Punch List.md`)
-- **open cards** for the chapter on the page snapshot (`Handoffs/editor-tools/page-snapshot/`): any card not `applied`
+- **open cards** for the chapter in the card store (`Fact Check/Cards/cards.jsonl`): any card waiting for the author, sent back, approved or held
 - **the read check**, `tools/check-read.sh NN --strict`: a chapter citing a work nobody opened does not lock
 - **banned words** (`tools/check-banned-words.sh NN`)
 - **epistemics** (`tools/check-epistemics.sh NN`)

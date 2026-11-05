@@ -2,14 +2,14 @@
 
 The Watcher is a scheduled task that checks that each role chat does what it was told to do. It serves the Managing editor (`Methodology/Roles.md`). The author edits this file. The Watcher reads it at the start of each run and works from it, never from its own task prompt or from memory.
 
-**Paths.** The Watcher reads `book.toml` at the vault folder for the chapter, appendix, fact-check, claims, events, hand-off and page-snapshot folders and the chapters out of the workflow (`python3 tools/bookconfig.py` prints them). It raises nothing about a chapter listed under `[workflow] out_of_workflow`.
+**Paths.** The Watcher reads `book.toml` at the vault folder for the chapter, appendix, fact-check, claims, events, hand-off folders, the card store and the chapters out of the workflow (`python3 tools/bookconfig.py` prints them). It raises nothing about a chapter listed under `[workflow] out_of_workflow`.
 
 ## Who is who
 
 `Methodology/Roles.md` names each role, its chat and the files it writes. The Watcher checks three roles:
 
 - **Production** — applies approved cards to `Chapters/` and `Appendices/`, writes the ledger's apply entry, commits, keeps `Fact Check/Locks.md` (through `tools/lock.py`), `Punch List.md`, `Book Structure.md` and `Project State.md`.
-- **Editor** — builds cards on the Source Rulings page and keeps `Fact Check/Ship Triage.md`.
+- **Editor** — builds cards (`tools/cards.py add`) for the card desk and keeps `Fact Check/Ship Triage.md`.
 - **Fact-checker** (with the nightly agent) — keeps the chapter ledgers, `Fact Check/Claims/`, `Fact Check/Asks.md`, `Fact Check/Findings Register.md` and `Fact Check/Back-fill Queue.md`.
 
 And three parties outside the checks:
@@ -83,9 +83,9 @@ Give particular attention to **"ready" reported as progress.** For each `decisio
 
 Each of these leaves a mark on disk. Check the mark.
 
-The Watcher cannot open the Source Rulings page itself. It reads cards from three places on disk:
+The Watcher reads cards from three places on disk:
 
-- **The page snapshot** (`[paths] page_snapshot` in `book.toml`): one file per card in `proposals/<card id>.json` (fields `title`, `chapter`, `where`, `status`, `current`, `proposedPara`, `proposedNote`, `reviewedPara`, `reviewedNote`, `submittedAt`, `reviewedAt`, `approvedAt`, `appliedAt`, `editedAt`), the author's button presses in `presses/`, and the time the page was read in `TAKEN`. State that time in the run summary. A snapshot older than the window covers only part of it; say which part.
+- **The card store** (`Fact Check/Cards/cards.jsonl`, `[paths] cards` in `book.toml`): one line per card version, each with `at`, `by` and `session`. `python3 tools/cards.py list` and `tools/cards.py show <id>` give each card as it stands now (fields `title`, `chapter`, `where`, `status`, `current`, `proposedPara`, `proposedNote`, `reviewedPara`, `reviewedNote`, `submittedAt`, `approvedAt`, `appliedAt`), with the author's presses folded in from the event log (`decision.recorded` with `card`; `press.refused`). `python3 tools/card-desk.py --check` gives the count in each lane of the desk.
 - **The card-log entries**: each card's read list, `<card_reads>/<card id>.reads.json` (`[paths] card_reads`); one ledger section per card, headed `## <date> — the sources named on card <card id>: <title>`; and `source.read` events in `Fact Check/events/*.jsonl` that hold the field `card`.
 - **The hand-off files and apply entries**: `Handoffs/Editor.md`, `Handoffs/Production.md`, and the ledgers' apply entries.
 
@@ -94,14 +94,14 @@ The event log holds no other card events. Never report a card as missing an even
 - **The author's queue is never empty** (Editor). `Handoffs/Editor.md` lists cards built or waiting. A hand-off that lists none while `Fact Check/Ship Triage.md` lists chapters still to card is a finding for the Editor.
 - **Ship Triage order** (Editor). The chapter on the Editor's `WORKING:` line is the next one in the Ship Triage register's order, or the hand-off gives a dated reason.
 - **Each card shows current and proposed text** (Editor). Where `Handoffs/Production.md` or an event records a card sent back for missing text, and `Handoffs/Editor.md` shows no rebuild, that is a finding for the Editor.
-- **Applied as approved** (Production). For each card the snapshot shows as `approved`, a ledger apply entry and a commit follow, or the hand-off records the card sent back unapplied.
+- **Applied as approved** (Production). For each card the store shows as `approved`, a ledger apply entry and a commit follow, or the hand-off records the card sent back unapplied.
 - **Lock sequence** (Production). For each chapter changed in the window, the event log shows `tools/lock.py` unlocking it before the change and relocking it after, or the chapter was unlocked throughout.
 - **Preflight before research** (Fact-checker). For each chapter whose ledger or claims file changed in the window, confirm a preflight receipt for that chapter (`.preflight/chNN.stamp`, written by `tools/preflight.sh`) dated before the change.
 - **Reads logged** (Fact-checker). Each new ledger line names its search surface and has a matching row in `Fact Check/Claims/`. A question for the author found in a ledger or hand-off reached `Asks.md` in the same turn.
 - **Scratch Notes routed** (Managing editor). Items in `Scratch Notes.md` with no routing mark go in the run summary for the Managing Editor.
 - **Directives honoured** (each role). Read `Fact Check/Directive Register.md` whole: a directive marked done with no evidence named, and a comment of the author's in the window that asks for work and has no row, are findings for the role the directive names.
-- **No card served over the author's instruction** (Editor). For each `note.ruled` or `decision.recorded` event in the window, the same item answers the author's instruction in the page snapshot (its card's `reviewedAt` or `editedAt` later than the ruling, and the card's text following the author's words) or in a hand-off entry; one that does not is a finding for the Editor.
-- **Card reads logged** (Editor; Fact-checker for the Claims rows). Run `tools/check-card-logged.py --json`; it only reads. NO READ LIST is the Editor's; NO CLAIMS ROW, NO LEDGER and NO EVENT are the role named in the card's hand-off entry, the Editor when none is named. STALE SNAPSHOT or NO SNAPSHOT goes in the run summary for the Editor, as a check that did not run. Compare with `_state.json` and raise only what is new in the window.
+- **No card served over the author's instruction** (Editor). For each `note.ruled` or `decision.recorded` event in the window, the same item answers the author's instruction in the card store (a version of its card written after the ruling, its text following the author's words) or in a hand-off entry; one that does not is a finding for the Editor.
+- **Card reads logged** (Editor; Fact-checker for the Claims rows). Run `tools/check-card-logged.py --json`; it only reads. NO READ LIST is the Editor's; NO CLAIMS ROW, NO LEDGER and NO EVENT are the role named in the card's hand-off entry, the Editor when none is named. Compare with `_state.json` and raise only what is new in the window.
 - **Closed lines held** (Editor). Run `tools/check-card-closed.py` in report mode: a card open on a line an approved or applied card already changed is a finding for the Editor.
 - **Asks** (Fact-checker). A DECIDE ask past due whose recorded outcome is missing.
 - **One register.** No new place where open work is written down was created in the window without a line in `Methodology/Roles.md` (Rules — Systems, "One register").
@@ -114,10 +114,10 @@ Some instructions leave no mark on disk — reading the rulebook at session open
 
 The author, quoting a chat back to itself as the typical failure: *"Four errors, one root cause, and you've named it four times. I audited each note's text in isolation and never read the card against the chapter."*
 
-For each card the snapshot or a hand-off file shows as built, approved or applied in the window:
+For each card the store or a hand-off file shows as built, approved or applied in the window:
 
 1. Open the chapter from disk. Read the paragraph the card names, whole, with the paragraphs either side and each footnote definition those paragraphs anchor.
-2. Read the card's proposed text from its snapshot file (`reviewedPara` and `reviewedNote` when set, else `proposedPara` and `proposedNote`) into that place, as the chapter would read once applied. Read the body and its notes together. Where the snapshot has no file for the card, say so in the run summary and check what the chapter shows.
+2. Read the card's proposed text from the store (`tools/cards.py show <id>`: `reviewedPara` and `reviewedNote` when set, else `proposedPara` and `proposedNote`) into that place, as the chapter would read once applied. Read the body and its notes together. Where the store has no such card, say so in the run summary and check what the chapter shows.
 3. Look for what an isolated audit misses:
    - a note whose source does not support the body sentence it is anchored to, or a body quotation whose source the notes no longer cite
    - a note anchored on a marker the proposed body removes, or a body marker with no definition

@@ -5,7 +5,7 @@ WHAT IT CHECKS, ON A COPY OF THE SAMPLE VAULT
 
     check-lock-ready.sh
       1. Chapter 2 fails, and the report names each planted blocker: an open
-         Punch List item, an open card on the page snapshot, the work nobody
+         Punch List item, an open card in the card store, the work nobody
          has read (check-read.sh), and the missing preflight receipt.
       2. A Punch List item for another chapter (Ch12) does not block Ch02.
       3. Chapter 1 fails on its planted banned word.
@@ -73,14 +73,14 @@ with tempfile.TemporaryDirectory() as t:
         "- [ ] Ch02 — check the Hamilton quotation against the source\n"
         "- [x] Ch02 — a closed item does not block\n"
         "- [ ] Ch12 — another chapter's item\n", encoding="utf-8")
-    props = v / "Handoffs" / "editor-tools" / "page-snapshot" / "proposals"
-    props.mkdir(parents=True, exist_ok=True)
-    (props / "locktest-c1.json").write_text(json.dumps(
-        {"title": "Ch 02 · the Hamilton quotation", "chapter": "Ch 02", "where": "Ch02/L5",
-         "status": "yours"}), encoding="utf-8")
-    (props / "locktest-c2.json").write_text(json.dumps(
-        {"title": "Ch 02 · applied", "chapter": "Ch 02", "where": "Ch02/L3",
-         "status": "applied"}), encoding="utf-8")
+    store = v / "Fact Check" / "Cards" / "cards.jsonl"
+    with store.open("a", encoding="utf-8") as f:
+        for cid, rec in (("locktest-c1", {"title": "Ch 02 · the Hamilton quotation", "chapter": "Ch 02",
+                                          "where": "Ch02/L5", "status": "yours"}),
+                         ("locktest-c2", {"title": "Ch 02 · applied", "chapter": "Ch 02", "where": "Ch02/L3",
+                                          "status": "applied"})):
+            f.write(json.dumps({"id": cid, "version": 1, "at": "2026-10-13T00:00:00Z", "by": "test",
+                                "card": rec}) + "\n")
 
     # 1, 2
     r = run(v, gate, "02")

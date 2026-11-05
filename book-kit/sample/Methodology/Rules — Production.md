@@ -22,8 +22,8 @@ The author: *"Show me the context of the questions you have. Show me the changes
 
 **The six steps. Nothing else is the workflow.**
 
-1. **CONTEXT.** The question arrives with the text it is about — the body line, the note, the lines either side — verbatim from disk, under `Ch##/L##`. On the page: the card's `before`, `current[]` and `after`.
-2. **PROPOSAL.** The replacement text, in full, under its own heading — never a description of it, never a word count. On the page: `proposedPara` and `proposedNote`.
+1. **CONTEXT.** The question arrives with the text it is about — the body line, the note, the lines either side — verbatim from disk, under `Ch##/L##`. On a card: its `before`, `current[]` and `after`.
+2. **PROPOSAL.** The replacement text, in full, under its own heading — never a description of it, never a word count. On a card: `proposedPara` and `proposedNote`.
 3. **THE AUTHOR'S RULING.** The author's press on the card, or words in chat.
 4. **AGREEMENT → THE EDIT IS MADE.** The same day, by Production: never queued, never staged, never "pending a gate". The chapter file changes (`tools/apply-card.py`) and the card is marked applied.
 5. **A PROBLEM → A NEW VERSION IS SHOWN.** The author's objection produces a new version of the card, shown before anything is written. It never produces a silent fix applied on the strength of the objection. An objection is no approval of whatever comes next.
