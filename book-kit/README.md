@@ -90,7 +90,11 @@ The rulebook in `vault/Methodology/` comes from the original author's working ru
 - **Settled is settled, and wrong comes back as a card.** A line you approved does not come back for a better word; it comes back, whole, in the desk's Reopen? lane, when a reading shows it wrong.
 - **A card shows the words.** Current and Proposed, in full, every time.
 - **You see only cards that are ready.** Every name, number, date and quotation on a card has a logged read; no banned word; a second session has audited its prose; it still reads as the chapter does. A card that fails one waits under "With Claude" with the reason.
-- **No collisions.** When a card is applied, every other open card of that chapter is refreshed from disk or sent back to its owner.
+- **No collisions.** When a card is applied, every other open card of that chapter is refreshed from disk or sent back to its owner. Two open cards never work one paragraph: the second is folded in, or waits behind the first (`queuedBehind`).
+- **The top of every card answers you.** Your words, answered, then a plain TLDR and one recommendation; What changed, each change with its reason; each choice its own decision, with its own Approve button; and "Keep it the way it is" on every card.
+- **Five minutes to take back an Approve.** After you press Approve the card waits on your desk with "Undo my approval", and nothing acts on it until the wait is over (`book.toml` `[desk] approve_wait_seconds`).
+- **Fresh eyes before you see a card.** A reader with a fresh context reads each card as you will see it before it is released to you (for a card that answers your directive, six of them, once: `tools/review_pipeline.py`), and `tools/desk_audit.py` checks that your pages show no asterisks, role names, file paths or codes.
+- **Three tries, then a person.** After three versions since your directive and none approved, the card stops and goes to the Managing Editor, and you see it under Questions for you.
 - **Your Approve rules on the ideas.** Each approved card is still fact-checked and language-checked before it goes in.
 - **A sample before any bulk write.** Each card gate starts at "warn" and goes to "refuse" in `book.toml` `[gates]` after you have seen what it catches.
 

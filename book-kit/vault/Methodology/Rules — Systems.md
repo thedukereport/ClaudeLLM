@@ -28,7 +28,7 @@ The author rules by the card title and navigates by the coordinate. **A tool tha
 
 The author: *"When I see serial statements like this, I think the workflow has no mechanism to account for changes as they happen (or to catch errors); it's just bespoke false confidence in whatever the last script you wrote is."*
 
-**Open work lives in the places `Methodology/Roles.md` names** — the card store (`Fact Check/Cards/cards.jsonl`, shown on the card desk), `Fact Check/Asks.md`, `Fact Check/Findings Register.md`, `Fact Check/Back-fill Queue.md`, `Punch List.md`, the hand-off inboxes — and nowhere else. A new place where open work is written down is declared in Roles.md the day it is made, or it is a place nobody looks. The reason: in the original system the author asked four times for all tasks to be reconciled, and the cause each time was a register that no screen read; one register recorded a fault in a note while a card in another proposed promoting that note into the sentence it failed to support.
+**Open work lives in the places `Methodology/Roles.md` names** — the card store (`Fact Check/Cards/`, shown on the card desk), `Fact Check/Asks.md`, `Fact Check/Findings Register.md`, `Fact Check/Back-fill Queue.md`, `Punch List.md`, the hand-off inboxes — and nowhere else. A new place where open work is written down is declared in Roles.md the day it is made, or it is a place nobody looks. The reason: in the original system the author asked four times for all tasks to be reconciled, and the cause each time was a register that no screen read; one register recorded a fault in a note while a card in another proposed promoting that note into the sentence it failed to support.
 
 ### The markdown is a rendering. The state is JSON.
 

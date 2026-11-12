@@ -32,6 +32,8 @@ The author: *"How do you want to manage these? Best practice."*
 
 **And: batch, never interrupt.** Asks are collected and put to the author at a checkpoint. **Asked once** — an answered ask is in the file, and in nobody's memory.
 
+**Three versions, then the Managing Editor.** A writer stopped by the three-version stop (core §5) sends the card here with what each version tried. The Managing Editor reads the card and the author's words, decides with the writer what the next version must do, and lifts the stop with `tools/cards.py lift-stop <id> --by "Managing Editor" --reason "<what the next version does>"`. The card waits under Questions for you on the desk meanwhile, where the author's "Bring it back to me" also lifts it.
+
 ## The status report
 
 Once per session the Managing Editor tells the author, in this order: the count of cards waiting on the card desk (`tools/cards.py counts`, and the desk's lanes); the count of open asks in `Fact Check/Asks.md`; the days left to the ship date in `Project State.md`; what is blocked and on whom; the count of commits waiting to be pushed. Each count is measured in the turn it is reported (core §3, "A number is a claim").

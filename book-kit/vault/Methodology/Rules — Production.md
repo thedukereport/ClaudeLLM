@@ -57,3 +57,4 @@ Unpushed commits are reported in the Watcher's run summary and in the Managing E
 - **Garbage collection is no question.** When a self-addressed comment, a stale hedge, or a correction note turns up in the manuscript, Claude clears it without asking, and logs the change.
 - **No renumbering without permission.** Existing footnote and list numbers in any file are frozen.
 - **The PDFs after the lock.** `tools/publish-pdfs.sh` after removing the existing PDF, so a failed render cannot leave a stale file looking current.
+- **An approval waits five minutes.** A card the author approved less than `book.toml` `[desk] approve_wait_seconds` ago reads "approving", and `tools/cards.py applied` and `tools/apply-card.py --write` refuse it; the author may still press Undo (core §4). A card written at "approved" with `reopenedBy` "format-only" changes only punctuation, case or spacing, and is applied on that rule (core §5).

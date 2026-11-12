@@ -17,8 +17,14 @@ WHOSE RULE THIS IS
 
 WHAT IT READS AS A FACT, IN THE PASSAGE THE AUTHOR WOULD APPROVE (reviewedPara, else proposedPara; the note too)
 
-    quotation   words in double quotation marks, three words or more (a gloss
-                after "means", "rendered", "called" and the like is not one)
+    quotation   words in quotation marks, three words or more, the marks paired in
+                order line by line (a gloss after "means", "rendered", "called",
+                "reads" and the like, or after a bold or italic term and a dash,
+                is not one)
+    title       a quoted title in a citation ("The Red Pill,"): a credit, which
+                needs a read that holds it
+    full name   a name spelled out in parentheses after a proper noun or its
+                acronym
     name        two or more capitalised words in a row ("John Jay", "Bank of England")
     date        a year (1000–2099), with its day and month when the text gives them
     number      any other figure of two digits or more ("6,443", "75–95%")
@@ -29,9 +35,12 @@ WHAT IT READS AS A FACT, IN THE PASSAGE THE AUTHOR WOULD APPROVE (reviewedPara, 
 WHAT COUNTS AS AN OPENED READ
 
     A row of `Fact Check/Claims/*.jsonl` with a `reader`, a `drive_path` that is
-    neither empty nor "NOT IN THE LIBRARY", and no `path_resolved_by_match`. The
-    fact is covered when its words stand in that row's text fields (states,
-    quotes, claim, title, author, location, ref and the like). A match here is a
+    neither empty nor "NOT IN THE LIBRARY", no `path_resolved_by_match`, and a
+    `type` that records no failed search or work not read (NEGATIVE_TYPES: a row
+    saying no source gives a date once covered that date). The fact is covered
+    when its words stand in one of that row's text fields (states, quotes,
+    claim, title, author, location and the like); never in `ref`, which quotes
+    the book's own words under check. A match here is a
     pointer that the read exists; the row is what a reader checks.
 
     `tools/card_reads_exempt.jsonl` takes a fact out for one card, one JSON
@@ -55,10 +64,18 @@ sys.path.insert(0, str(TOOLS))
 import bookconfig as B  # noqa: E402
 
 TEXT_FIELDS = ("states", "quotes", "quote", "claim", "subject", "title", "subtitle", "author", "location",
-               "evidence_quotes", "ref", "words", "text")
+               "evidence_quotes", "words", "text", "where_read")
+#: "ref" is left out: it quotes the BOOK's words under check, so a fact matched there is the book covering itself.
+#: Claims row types that record a search that failed, a work not read or a question still open: never a read.
+NEGATIVE_TYPES = {"search_negative", "source_absent", "source_wanted", "not_established", "not_read", "not_found",
+                  "search_record", "open_item"}
 SMALL = {"of", "de", "la", "le", "von", "van", "der", "du", "da", "di", "del", "della", "des", "ibn", "bin"}
-GLOSS = re.compile(r"(mean(s|ing|t)?|rendered|renders|render|became|become|becomes|gloss(ed|es)?|translat\w*|"
-                   r"the word|the sense|in English|in Latin|in Greek|called)\W{0,12}$", re.I)
+GLOSS = re.compile(r"(mean(s|ing|t)?|rendered|renders|render|became|become|becomes|gloss(ed|es)?|"
+                   r"translat\w*(?:\s+(?:as|to|into))?|the word|the sense|in English|in Latin|in Greek|called|reads)"
+                   r"\W{0,12}$", re.I)
+#: The list form of a gloss: a term in bold or italics, a dash, then its English in quotation marks.
+LISTGLOSS = re.compile(r"(?:\*\*[^*\n]{1,60}\*\*|(?<!\*)\*[^*\n]{1,60}\*)\s*[—–:]\s*$")
+MINOR = {"a", "an", "the", "of", "in", "on", "and", "to", "for", "with", "at", "by", "from", "or", "as", "into", "vs"}
 MONTHS = "January|February|March|April|May|June|July|August|September|October|November|December"
 TERMS = TOOLS / "card_reads_book_terms.txt"
 EXEMPT = TOOLS / "card_reads_exempt.jsonl"
@@ -106,6 +123,42 @@ def _opens_sentence(word, before):
     return at_start and (word in OPENERS or (word.lower() in _DICT and word not in _DICT))
 
 
+def is_title(q):
+    """A quoted string set as a title in a citation: the comma or full stop inside the marks, and each word but the
+    small ones capitalised ("The Red Pill,"). A sentence quoted from a person does not read so. It is still a credit,
+    and needs a read that holds it."""
+    q = str(q or "").strip()
+    if not q or q[-1] not in ",.":
+        return False
+    letters = [w for w in re.split(r"[\s/-]+", q.strip(" ,.")) if w and re.match(r"[^\W\d_]", w)]
+    return len(letters) >= 2 and letters[0][0].isupper() and all(w[0].isupper() or w.lower() in MINOR for w in letters)
+
+
+def quote_spans(t):
+    """[(start, end, inner)]: quotation marks paired in order, line by line. Straight marks pair first with second,
+    third with fourth; a curly “ opens and ” closes. A quotation of any length is found: a pattern with a length
+    limit skips a long one and pairs its closing mark with the next opening mark."""
+    out, pos = [], 0
+    for line in t.split("\n"):
+        stack, opened = [], None
+        for i, ch in enumerate(line):
+            if ch == '"':
+                if opened is None:
+                    opened = i
+                else:
+                    if i - opened - 1 >= 3:
+                        out.append((pos + opened, pos + i + 1, line[opened + 1:i]))
+                    opened = None
+            elif ch == "“":
+                stack.append(i)
+            elif ch == "”" and stack:
+                j = stack.pop()
+                if not stack and i - j - 1 >= 3:
+                    out.append((pos + j, pos + i + 1, line[j + 1:i]))
+        pos += len(line) + 1
+    return sorted(out)
+
+
 def facts(text):
     """[(kind, the fact as written)] in the order they stand."""
     t = clean(text)
@@ -117,11 +170,14 @@ def facts(text):
             seen.add(key)
             out.append((k, v.strip()))
 
-    for m in re.finditer(r'"([^"\n]{3,600})"|“([^”\n]{3,600})”', t):
-        q = (m.group(1) or m.group(2)).strip()
-        quoted.append(m.span())
-        before, after = t[max(0, m.start() - 40):m.start()], t[m.end():m.end() + 3]
-        if len(q.split()) < 3 or GLOSS.search(before) or re.match(r"\s*\(", after):
+    for a, b, q in quote_spans(t):
+        q = q.strip()
+        quoted.append((a, b))
+        before, after = t[max(0, a - 40):a], t[b:b + 3]
+        if len(q.split()) < 3 or GLOSS.search(before) or LISTGLOSS.search(before) or re.match(r"\s*\(", after):
+            continue
+        if is_title(q):
+            add("title", q.strip(" ,."))
             continue
         add("quotation", q)
 
@@ -136,14 +192,24 @@ def facts(text):
         if inq(m.start()) or re.fullmatch(r"(1\d{3}|20\d{2})s?", v.strip()) or v.count(".") >= 2:
             continue
         add("number", v)
+    # A full name given in parentheses after a proper noun or its acronym ("Satys (Société d'Application des
+    # Techniques ...)") is a fact, tested whole: it was once added to a card with no read behind it.
+    for m in re.finditer(r"(?:\*[A-Z][^*\n]{0,40}\*|\b[A-Z][\w’'-]*[A-Z\w])\s*\(\s*[“\"]?([A-ZÀ-Ý][^()“”\"\n]{10,140}?)[”\"]?\s*\)", t):
+        inner = m.group(1).strip()
+        ws = inner.split()
+        if len(ws) >= 3 and sum(1 for w in ws if w[:1].isupper()) >= 2 and not inq(m.start()) \
+                and not re.search(r"\d|[:;]|\b(?:p|pp|ch|vol)\.", inner):
+            add("full name", inner)
     terms = book_terms()
     word = r"[A-Z][\w'’.-]*[\w]"
     for m in re.finditer(rf"{word}(?:\s+(?:(?:{'|'.join(SMALL)})\s+)*{word})+", t):
         if inq(m.start()):
             continue
         parts = m.group(0).split()
-        if _opens_sentence(parts[0], t[:m.start()]):
-            parts = parts[1:]
+        if _opens_sentence(parts[0], t[:m.start()]) or (
+                not t[:m.start()].rstrip() or t[:m.start()].rstrip()[-1] in ".!?:;\n\"”—(") \
+                and re.fullmatch(r"[A-Z][a-z]+(?:ing|ed)", parts[0]):
+            parts = parts[1:]          # "Answering Celsus, who …": a verb that opens the sentence is no part of a name
         while parts and parts[-1].lower() in SMALL:
             parts = parts[:-1]
         if len(parts) < 2:
@@ -173,10 +239,11 @@ def opened_rows():
                 continue
             dp = str(o.get("drive_path") or "").strip()
             if not str(o.get("reader") or "").strip() or not dp or dp.upper().startswith("NOT IN THE LIBRARY") \
-                    or o.get("path_resolved_by_match"):
+                    or o.get("path_resolved_by_match") or str(o.get("type") or "") in NEGATIVE_TYPES:
                 continue
-            rows.append(norm(" ".join(v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)
-                                      for k, v in o.items() if k in TEXT_FIELDS and v)))
+            # Fields joined by \x01, which no fact holds: a fact matches inside one field, never across two.
+            rows.append("\x01".join(norm(v if isinstance(v, str) else json.dumps(v, ensure_ascii=False))
+                                     for k, v in o.items() if k in TEXT_FIELDS and v))
     _ROWS.update(stamp=stamp, rows=rows)
     return rows
 
@@ -190,6 +257,8 @@ def covered(kind, fact, rows):
     if kind == "number":
         f = f.replace(" ", "")
         return any(f in r.replace(" ", "") for r in rows)
+    if kind in ("title", "full name"):
+        f = f.strip(" ,.;:")
     return any(f in r for r in rows)
 
 

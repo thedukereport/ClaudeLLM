@@ -48,9 +48,15 @@ python3 $T/prose.py            # ok: a second session audited it
 ```
 (The sample card was written by a session named `sample-editor`. In your own sessions Claude Code gives each one its id, and `tools/prose.py` reads it.) Reload the desk: the card is under **Waiting for you**.
 
+Before a card reaches you, a reader with a fresh context reads it the way you will, and a script reads every page you rule from:
+```
+python3 $T/card-desk.py --show ch02-reflection-choice   # the card's page as plain text, as you will read it
+python3 $T/desk_audit.py                                # 0 fault(s): no asterisk, role name, path or code on your pages
+```
+
 ## You approve; Production applies
 
-On the desk, press **Approve for the chapter**. The press is one `decision.recorded` event in `Fact Check/events/`; `tools/cards.py list` now shows the card `approved`. Then Production:
+On the desk, press **Approve for the chapter**. The press is one `decision.recorded` event in `Fact Check/events/`. For five minutes the card waits under **Approved, you can undo it**, with **Undo my approval**, and `tools/cards.py list` shows it `approving`; Production's `--write` refuses it until then. After five minutes it reads `approved`. Then Production:
 ```
 python3 $T/apply-card.py ch02-reflection-choice            # Current and Proposed in full, nothing written
 python3 $T/apply-card.py ch02-reflection-choice --write    # applies, keeps the block ids, writes the ledger entry
@@ -77,7 +83,7 @@ Chapter 1, line 5: "The sentence carries the whole pamphlet's frame." The word l
 ```
 python3 $T/check-card-closed.py
 ```
-The card `ch01-carries-sentence` is held: it changes Chapter 1's paragraph, which the applied card `ch01-paine-society-cite` already changed. Once its gates pass, the desk shows it in the **Reopen?** lane, whole, with "Reopen this line" and "Keep it closed". A line you approved does not come back for a better word; it comes back there when a reading shows it wrong.
+The card `ch01-carries-sentence` is held: it changes Chapter 1's paragraph, which the applied card `ch01-paine-society-cite` already changed. Once its gates pass, the desk shows it in the **Reopen?** lane, whole, with "Reopen this line" and "Keep it the way it is". A line you approved does not come back for a better word; it comes back there when a reading shows it wrong.
 
 ## Locking
 

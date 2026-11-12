@@ -41,14 +41,26 @@ semantic_search = ""
 [desk]
 # The card desk, tools/card-desk.py: the one place you rule on a card, in your browser.
 port = 8766
+approve_wait_seconds = 300     # after Approve, the card waits this long with an Undo button before anything acts on it
 
 [gates]
-# How each card gate acts: "warn" (the writer sees it, and the card desk holds the card)
+# How each card gate acts: "warn" (the writer sees it; the card goes in)
 # or "refuse" (tools/cards.py writes nothing). Each starts at warn; move one to refuse
 # after you have seen a sample of what it catches (Methodology/UAT Log.md).
 card_words = "warn"         # a banned word in the text you would approve
+card_own_words = "warn"     # a banned word in the card's own words to you (title, TLDR, each why)
 card_reads = "warn"         # a name, number, date or quotation with no logged read
-card_cross_audit = "warn"   # a prose audit by the same session that wrote the card
+card_pointer = "warn"       # body text or a note that points the reader to another part of the book
+card_overlap = "warn"       # a new card on a paragraph another open card already works
+card_format_only = "warn"   # a card that changes only punctuation, case or spacing comes to your desk
+card_summary = "warn"       # no TLDR, recommendation or subject, or a change with no reason
+card_choices = "warn"       # choices that are not one decision each, or one proposed text for several choices
+card_answer = "warn"        # a card written after your directive that does not answer it at the top
+card_three_versions = "warn"  # a fourth version after your directive, none approved: it goes to the Managing Editor
+card_notes_protocol = "warn"  # a note that breaks the footnote protocol: a URL, a judgement, a retelling, two works
+card_cross_audit = "warn"   # at release: no prose audit of this text by a session that wrote none of it
+card_desk_audit = "warn"    # at release: the card's page shows an asterisk, a role name, a path or a code
+card_review = "warn"        # at release: no fresh reviewer's PASS on this version (tools/review_pipeline.py)
 card_refresh = "report"     # "write": after an apply, refresh or send back the chapter's other cards
 
 [workflow]

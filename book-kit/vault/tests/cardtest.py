@@ -35,17 +35,23 @@ ON_CLOSED = "ch01-carries-sentence"        # (c) open; on the paragraph card (a)
 CHOICE = "ch02-reflection-choice"          # (d) open; "reflection and design" -> "reflection and choice"
 
 
+#: Files the tools build in a vault, which git leaves out of the kit. A smoke run against the sample itself builds
+#: them there, and a test that copied them would start from a state no fresh download has.
+BUILT = ("Library Index.json", "__pycache__", ".write.lock")
+
+
 @contextlib.contextmanager
 def sample_copy():
     with tempfile.TemporaryDirectory() as t:
         v = Path(t) / "vault"
-        shutil.copytree(SAMPLE, v)
+        shutil.copytree(SAMPLE, v, ignore=shutil.ignore_patterns(*BUILT))
         yield v
 
 
 def run(vault, tool, *args, timeout=150, session="test-auditor"):
     """Run a tool in the copy, as the session `session` (the second-session gate reads it)."""
     env = dict(os.environ, BOOK_VAULT=str(vault), BOOK_SESSION=session)
+    env.setdefault("BOOK_APPROVE_WAIT", "0")     # a test that times the five-minute wait sets its own
     return subprocess.run([sys.executable, str(TOOLS / tool), *map(str, args)], cwd=vault,
                           env=env, capture_output=True, text=True, timeout=timeout)
 

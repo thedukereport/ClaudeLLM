@@ -133,6 +133,44 @@ def card_hits(card, words=None, counter=None):
     return hits
 
 
+def own_texts(card):
+    """[(field, text)]: the card's own words to the author, outside the book text: its title, tldr, recommendation,
+    subject, the answer to his words, each change's why, each choice's label and reason."""
+    out = [(k, card.get(k)) for k in ("title", "tldr", "recommendation", "subject", "summary", "job")]
+    a = card.get("answer") if isinstance(card.get("answer"), dict) else {}
+    out.append(("answer", a.get("answer")))
+    for i, c in enumerate(card.get("changeList") or [], 1):
+        if isinstance(c, dict):
+            out.append((f"changeList[{i}].why", c.get("why")))
+            for j, o in enumerate(c.get("choices") or [], 1):
+                if isinstance(o, dict):
+                    out += [(f"changeList[{i}].choices[{j}].label", o.get("label")),
+                            (f"changeList[{i}].choices[{j}].reason", o.get("reason"))]
+    for j, o in enumerate(card.get("choices") or [], 1):
+        if isinstance(o, dict):
+            out += [(f"choices[{j}].label", o.get("label")), (f"choices[{j}].reason", o.get("reason"))]
+    return [(k, str(v)) for k, v in out if isinstance(v, str) and v.strip()]
+
+
+def own_hits(card, words=None):
+    """Each banned word in the card's own words to the author (own_texts). The author reads these too, so the
+    standing rule holds for them: never offer the author a banned word. Quotations and italics are set aside."""
+    if words is None:
+        if not _WORDS:
+            _WORDS.extend(banned_words())
+        words = _WORDS
+    hits = []
+    for field, text in own_texts(card):
+        stripped = strip_quoted(text)
+        for rx, pattern, carve, rx_auto in words:
+            for m in rx.finditer(stripped):
+                if rx_auto is not None and rx_auto.search(text[max(0, m.start() - 40):m.end() + 40]):
+                    continue
+                hits.append({"field": field, "word": m.group(0), "carve_out": carve,
+                             "context": norm(text[max(0, m.start() - 58):m.end() + 52])})
+    return hits
+
+
 def main(argv):
     as_json = "--json" in argv
     cards = C.store_cards()

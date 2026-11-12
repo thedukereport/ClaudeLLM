@@ -21,7 +21,9 @@ WHAT IT DOES, FOR EACH OTHER OPEN CARD OF THE CHAPTER (`assess`)
     "ok"       its own lines, and the paragraphs it shows above and below, read as on disk.
     "refresh"  its own lines read as on disk and a neighbour does not: a new version gives
                `before` and `after` as on disk now, and no other field changes. Only a
-               card waiting for the author ("yours") is refreshed.
+               card waiting for the author ("yours") is refreshed. With book.toml
+               [gates] card_review = "refuse", the refreshed version goes in held
+               until a fresh reviewer's PASS covers it and its owner releases it.
     "back"     a line of its own no longer reads as on disk, or a "submitted" card's
                neighbour changed (the author's sent words stay on the author's press): the
                card is held off the author's desk and its owner gets an item in its
@@ -159,9 +161,15 @@ def run(chapter, applied="", write=None):
         did = "reported (card_refresh is in report mode)"
         if write and a["action"] == "refresh":
             rec = dict(cards.versions(cid)[-1]["card"], before=a["before"], after=a["after"])
+            held = B.gate_mode("card_review") == "refuse" and cards.review_findings(cid, rec)
+            if held:
+                # A refreshed version waits for a fresh reviewer, as any new version does; its owner releases it.
+                rec.update(status="held", heldBy=c.get("_by") or "Editor", heldFacts=[], heldAt=cards._now(),
+                           heldFrom="yours", heldReason=f"its neighbours were refreshed after {applied or 'an apply'}; "
+                           f"a fresh reviewer reads the new version, then its owner releases it")
             v = cards._append(cid, rec, by=c.get("_by") or "Editor", source="card_refresh",
                               why=f"neighbours as on disk after {applied or 'an apply'}")
-            did = f"v{v} written with before/after as on disk"
+            did = f"v{v} written with before/after as on disk" + ("; held for a fresh reviewer" if held else "")
         elif write and a["action"] == "back":
             if c.get("status") in cards.OPEN:
                 cards.hold(cid, reason=a["why"], by=c.get("_by") or "Editor")

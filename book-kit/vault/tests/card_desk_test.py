@@ -47,7 +47,7 @@ def desk(v, code):
     import os
     import subprocess
     r = subprocess.run([sys.executable, "-c", prog, str(T.TOOLS)], cwd=v, capture_output=True, text=True,
-                       env=dict(os.environ, BOOK_VAULT=str(v), BOOK_SESSION="test-desk"), timeout=150)
+                       env=dict(os.environ, BOOK_VAULT=str(v), BOOK_SESSION="test-desk", BOOK_APPROVE_WAIT="0"), timeout=150)
     if r.returncode:
         bad.append("the desk code failed: " + r.stderr[-800:])
     return r.stdout

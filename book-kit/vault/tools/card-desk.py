@@ -5,14 +5,18 @@
     python3 tools/card-desk.py --port 8767
     python3 tools/card-desk.py --check      # draws every page once and exits: the smoke test
 
-    /                 the next card for the author, in the order below
+    /                 Questions for you, then the next card for the author, in the order below
     /?after=<id>      the card after that one
     /card/<id>        any card, whatever its lane, with its older versions in a fold
+    /chapter/<n>      every card of one chapter that waits for the author, in line order
     /lane/<name>      every card in one lane
     /all              every card, by lane, each with the reason it is there
     /asks             the open asks in Fact Check/Asks.md, one at a time, with ok / no / words
     /sources          the works no shelf has, for the author to get
     /healthz          "ok"
+
+    python3 tools/card-desk.py --show <id>  # the card's page as plain text, as the author will read it:
+                                            # what a fresh reviewer reads before tools/cards.py review-pass
 
 WHY A SERVER OF ITS OWN
 
@@ -31,15 +35,34 @@ THE LANES, IN THE ORDER THE AUTHOR WORKS THEM
                       (`tools/check-card-closed.py`), shown whole, with "Reopen
                       this line" and "Keep it closed". A wrong line comes back as
                       a card; it comes back here.
-    Waiting for you   a new card whose every gate passes: Approve, Send my edits
-                      for checking, This is a directive, Save my words.
+    Questions for you a card stopped after three versions since the author's
+                      directive (tools/cards.py, the three-version stop), with
+                      his words and "Bring it back to me": a question to him,
+                      never a card to approve.
+    Waiting for you   a new card whose every gate passes: Approve (or Approve
+                      choice N on a card with choices), Send my edits for
+                      checking, This is a directive, Keep it the way it is.
+    Approved, you can undo it   for five minutes after Approve (book.toml [desk]
+                      approve_wait_seconds) the card waits here with "Undo my
+                      approval", and no tool acts on it.
     Approved, going in   approved and not yet in the book: Withdraw my approval.
     In the book       applied: Take a second look.
     With Claude       the author sent edits or a directive (Claude checks and
                       writes a new version), or a gate holds the card, or its
                       owner held it. Shown with each reason and no Approve. The
                       author sees only cards that are ready; this lane is where
-                      the others wait.
+                      the others wait. The author's pages say so in one plain
+                      line; the reasons, for Claude, sit in a fold.
+
+WHAT A CARD SHOWS, TOP TO BOTTOM
+
+    Your words, answered (the card's `answer`), then the TLDR and the
+    recommendation in large type; the choices, each with its label, its reason
+    and its own Approve button; What changed, and why (`changeList`: each change
+    as Now and Will read, with its why, and each choice's own words); then the
+    paragraph above, the current text, the proposed text in an editable box, the
+    paragraph below; the remaining buttons; the record, quieter. Text the
+    author reads shows the book's italics and bold, never an asterisk.
 
 THE GATES, RUN ON EACH CARD AS IT IS DRAWN (none of them is a stored verdict)
 
@@ -56,7 +79,11 @@ HIS PRESSES
     POST /press. Each press is one `decision.recorded` event: actor = book.toml
     [book] author_actor, the card's id and the version on the author's screen,
     `decision_kind` approve | edit | directive | card-note | withdraw | reopen |
-    keep_closed, and the author's words verbatim. `tools/cards.py fold` reads
+    keep_closed, and the author's words verbatim. "Approve choice N" is an
+    approve with `choice` N and `choice_text`, the paragraph that choice
+    writes. "Undo my approval" is a withdraw with `what` "undo". "Keep it the
+    way it is" is keep_closed on a line he approved before, and elsewhere a
+    directive with `what` "leave": the card closes, unapplied. `tools/cards.py fold` reads
     them. A press the desk refuses (the card has a newer version, the lane does
     not offer that button, a press that needs words has none) is recorded as a
     `press.refused` event, with the reason and every word typed, and the card
@@ -87,12 +114,15 @@ import bookconfig as B  # noqa: E402
 import cards  # noqa: E402
 
 SEP = "\n\n⁂\n\n"
-LANES = ("reopen", "yours", "approved", "applied", "claude")
-LANE_NAME = {"reopen": "Reopen?", "yours": "Waiting for you", "approved": "Approved, going in",
+LANES = ("question", "reopen", "yours", "approving", "approved", "applied", "claude")
+LANE_NAME = {"question": "Questions for you", "reopen": "Reopen?", "yours": "Waiting for you",
+             "approving": "Approved, you can undo it", "approved": "Approved, going in",
              "applied": "In the book", "claude": "With Claude", "closed": "Closed"}
 BUTTONS = {
-    "yours": ("approve", "edit", "directive", "card-note"),
+    "question": ("bring", "card-note"),
+    "yours": ("approve", "edit", "directive", "leave", "card-note"),
     "reopen": ("reopen", "keep_closed", "card-note"),
+    "approving": ("undo", "card-note"),
     "approved": ("withdraw", "card-note"),
     "applied": ("reopen", "card-note"),
     "claude": ("card-note",),
@@ -100,8 +130,11 @@ BUTTONS = {
 }
 LABEL = {"approve": "Approve for the chapter", "edit": "Send my edits for checking",
          "directive": "This is a directive", "card-note": "Save my words", "withdraw": "Withdraw my approval",
-         "reopen": "Reopen this line", "keep_closed": "Keep it closed"}
+         "undo": "Undo my approval", "reopen": "Reopen this line", "keep_closed": "Keep it the way it is",
+         "leave": "Keep it the way it is", "bring": "Bring it back to me"}
 NEEDS_WORDS = ("directive", "card-note")
+#: The press each button records: (decision_kind, what).
+KIND = {"undo": ("withdraw", "undo"), "leave": ("directive", "leave")}
 
 
 def _mod(name, file):
@@ -176,10 +209,20 @@ class Gates:
             return "closed", [cards.locked(c)]
         if st == "applied":
             return "applied", []
+        if st == "approving":
+            return "approving", [f"you approved it; until {c.get('settlesAt')} you can undo it, and nothing acts on it"]
         if st == "approved":
             return "approved", []
         if st == "superseded":
+            if c.get("withdrawn"):
+                return "closed", [f"Withdrawn by its writer: {c.get('closedReason')}"]
             return "closed", [c.get("closedReason") or "superseded"]
+        if st in ("held", "submitted"):
+            stop = cards.stop_reached(cid)
+            if stop:
+                n, d = stop
+                return "question", [f"Claude has written {n} versions since your words of {str(d.get('ts'))[:16]}, "
+                                    f"and you approved none: “{str(d.get('text') or '')[:300]}”"]
         if st == "held":
             return "claude", [f"held by {c.get('heldBy')}: {c.get('heldReason')}"] + list(c.get("heldFacts") or [])
         if st == "submitted":
@@ -210,6 +253,9 @@ button{font:inherit;margin:6px 8px 0 0;padding:6px 12px;border:1px solid var(--a
 button.primary{background:var(--accent);color:var(--bg)} .why li{color:var(--warn)} .msg{border-left:4px solid var(--ok);padding:6px 10px}
 .msg.bad{border-color:var(--bad)} table{border-collapse:collapse;width:100%} td{border-bottom:1px solid var(--line);padding:4px 6px;vertical-align:top}
 details{margin-top:1em} small{color:var(--muted)}
+.lead .tldr{font-size:1.2em} .lead .rec{font-weight:bold} .lead{margin:1em 0}
+.choice,.change{border-left:3px solid var(--line);padding-left:10px;margin:10px 0} p.why{color:var(--muted)}
+blockquote{margin:0 0 0 12px;color:var(--muted)}
 """
 
 DRAFT_JS = """
@@ -237,72 +283,135 @@ DRAFT_JS = """
 
 def page(title, body):
     nav = ("<nav><a href='/'>Next card</a><a href='/lane/yours'>Waiting for you</a><a href='/lane/reopen'>Reopen?</a>"
-           "<a href='/lane/approved'>Approved</a><a href='/lane/claude'>With Claude</a><a href='/asks'>Asks</a>"
+           "<a href='/lane/approving'>Undo</a><a href='/lane/approved'>Approved</a><a href='/lane/claude'>With Claude</a>"
+           "<a href='/asks'>Asks</a>"
            "<a href='/sources'>Sources to get</a><a href='/all'>All</a></nav>")
     return (f"<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
             f"<title>{esc(title)} — {esc(B.TITLE)}</title><style>{CSS}</style></head><body>{nav}{body}{DRAFT_JS}</body></html>")
 
 
+def rich(s):
+    """Text the author reads, as the book prints it: **bold** and *italic* drawn, never shown as asterisks."""
+    t = esc(s)
+    t = re.sub(r"\*\*([^*\n]+)\*\*", r"<b>\1</b>", t)
+    t = re.sub(r"(?<![\w*])\*([^*\n]+)\*(?![\w*])", r"<i>\1</i>", t)
+    return re.sub(r"(?<![\w_])_([^_\n]+)_(?![\w_])", r"<i>\1</i>", t)
+
+
+def where(s):
+    """A card's place as the author reads it: Ch##/L## and the note, never a block id."""
+    return re.sub(r"\s*\(block [a-z0-9]{6}\)", "", str(s or "")).strip()
+
+
+def _form(cid, v, inner):
+    return (f"<form method='post' action='/press' data-card='{esc(cid)}'>"
+            f"<input type='hidden' name='card' value='{esc(cid)}'><input type='hidden' name='version' value='{v}'>"
+            f"{inner}</form>")
+
+
+def _change_list(c):
+    """What changed, and why: each change as Now and Will read, its why, and each choice's own words."""
+    out = []
+    for i, x in enumerate(c.get("changeList") or [], 1):
+        if not isinstance(x, dict):
+            continue
+        out.append("<div class='change'>"
+                   + (f"<p><small>{esc(where(x.get('where')))}</small></p>" if x.get("where") else "")
+                   + (f"<p><small>Now</small></p><div class='text ctx'>{rich(x.get('before'))}</div>" if x.get("before") else "")
+                   + (f"<p><small>Will read</small></p><div class='text'>{rich(x.get('after'))}</div>"
+                      if x.get("after") and not x.get("choices") else "")
+                   + "".join(f"<p><small>Choice {j}: {esc(o.get('label'))}</small></p><div class='text'>{rich(o.get('after'))}</div>"
+                             for j, o in enumerate(x.get("choices") or [], 1) if isinstance(o, dict))
+                   + (f"<p class='why'>Why: {rich(x.get('why'))}</p>" if x.get("why") else "")
+                   + "</div>")
+    if out:
+        return "<h2>What changed, and why</h2>" + "".join(out)
+    if c.get("changes"):
+        return "<h2>What changes</h2><ul>" + "".join(
+            f"<li>{rich(x if not isinstance(x, dict) else (x.get('what') or json.dumps(x, ensure_ascii=False)))}</li>"
+            for x in c["changes"]) + "</ul>"
+    return ""
+
+
 def show_card(cid, c, lane, why, msg=""):
+    import card_shape as S
     v = c["_version"]
-    out = [f"<p><small>{esc(LANE_NAME[lane])} · {esc(c.get('chapter'))} · {esc(c.get('where'))} · version {v}</small></p>",
-           f"<h1>{esc(c.get('title'))}</h1>"]
+    btns = BUTTONS[lane]
+    out = [f"<p><small>{esc(LANE_NAME[lane])} · {esc(c.get('chapter'))} · {esc(where(c.get('where')))} · version {v}</small></p>",
+           f"<h1>{rich(c.get('title'))}</h1>"]
     if msg:
-        bad = msg.startswith("REFUSED")
-        out.append(f"<div class='msg{' bad' if bad else ''}'>{esc(msg)}</div>")
-    if why:
-        out.append("<h2>Why it is here</h2><ul class='why'>" + "".join(f"<li>{esc(w)}</li>" for w in why) + "</ul>")
+        out.append(f"<div class='msg{' bad' if msg.startswith('REFUSED') else ''}'>{esc(msg)}</div>")
+    if lane == "claude":
+        out.append("<p class='lead'>Claude is checking this card; it comes back to you when the check is done.</p>")
+        if why:
+            out.append("<details><summary>What Claude is fixing</summary><ul class='why'>"
+                       + "".join(f"<li>{esc(w)}</li>" for w in why) + "</ul></details>")
+    elif why:
+        out.append("<ul class='why'>" + "".join(f"<li>{esc(w)}</li>" for w in why) + "</ul>")
+    a = c.get("answer") if isinstance(c.get("answer"), dict) else {}
+    if a.get("answer"):
+        out.append(f"<h2>Your words, answered</h2><blockquote>{rich(a.get('his'))}</blockquote><p>{rich(a.get('answer'))}</p>")
+    if lane != "claude" and (c.get("tldr") or c.get("recommendation")):
+        out.append("<section class='lead'>" + (f"<p class='tldr'>{rich(c.get('tldr'))}</p>" if c.get("tldr") else "")
+                   + (f"<p class='rec'>{rich(c.get('recommendation'))}</p>" if c.get("recommendation") else "") + "</section>")
+    chs = S.choices_of(c)
+    if chs and "approve" in btns:
+        out.append("<h2>The choices</h2>" + _form(cid, v, "".join(
+            f"<div class='choice'><h3>{i}. {rich(o.get('label') or S.sentences(o.get('text'))[:1] and S.sentences(o.get('text'))[0])}</h3>"
+            + (f"<p>{rich(o.get('reason'))}</p>" if o.get("reason") else "")
+            + f"<button class='primary' name='kind' value='approve#{i}'>Approve choice {i}</button></div>"
+            for i, o in enumerate(chs, 1))))
+    if c.get("subject"):
+        out.append(f"<p><small>The paragraph is about: {rich(c.get('subject'))}</small></p>")
+    out.append(_change_list(c))
     if c.get("job"):
-        out.append(f"<h2>The paragraph's job</h2><p>{esc(c.get('job'))}</p>")
+        out.append(f"<h2>The paragraph's job</h2><p>{rich(c.get('job'))}</p>")
     if c.get("before"):
-        out.append(f"<h2>The paragraph above</h2><div class='text ctx'>{esc(c.get('before'))}</div>")
+        out.append(f"<h2>The paragraph above</h2><div class='text ctx'>{rich(c.get('before'))}</div>")
     out.append("<h2>Current, as in the chapter now</h2>")
     for seg in c.get("current") or []:
         if isinstance(seg, dict):
-            out.append(f"<p><small>{esc(seg.get('where'))}</small></p><div class='text'>{esc(seg.get('text'))}</div>")
+            out.append(f"<p><small>{esc(where(seg.get('where')))}</small></p><div class='text'>{rich(seg.get('text'))}</div>")
     proposed = c.get("proposedPara") or ""
-    if c.get("after"):
-        after_html = f"<h2>The paragraph below</h2><div class='text ctx'>{esc(c.get('after'))}</div>"
-    else:
-        after_html = ""
-    btns = BUTTONS[lane]
     out.append("<h2>Proposed, as it would read</h2>")
+    out.append(f"<div class='text'>{rich(proposed)}</div>")
+    if c.get("proposedNote") and not c.get("noteless"):
+        out.append(f"<div class='text'>{rich(c.get('proposedNote'))}</div>")
+    if "approve" in btns and not chs:
+        out.append(_form(cid, v, f"<button class='primary' name='kind' value='approve'>{LABEL['approve']}</button>"))
     if "edit" in btns:
-        out.append(f"<form method='post' action='/press' data-card='{esc(cid)}'>"
-                   f"<input type='hidden' name='card' value='{esc(cid)}'><input type='hidden' name='version' value='{v}'>"
-                   f"<textarea name='text' data-draft='{esc(cid)}|{v}|para'>{esc(proposed)}</textarea>")
+        inner = f"<textarea name='text' data-draft='{esc(cid)}|{v}|para'>{esc(proposed)}</textarea>"
         if c.get("proposedNote") and not c.get("noteless"):
-            out.append(f"<p><small>The footnote</small></p><textarea name='note' data-draft='{esc(cid)}|{v}|note'>"
-                       f"{esc(c.get('proposedNote'))}</textarea>")
-        out.append(f"<button class='primary' name='kind' value='approve'>{LABEL['approve']}</button>"
-                   f"<button name='kind' value='edit'>{LABEL['edit']}</button></form>")
-    else:
-        out.append(f"<div class='text'>{esc(proposed)}</div>")
-        if c.get("proposedNote") and not c.get("noteless"):
-            out.append(f"<div class='text'>{esc(c.get('proposedNote'))}</div>")
-    out.append(after_html)
-    if c.get("changes"):
-        out.append("<h2>What changes</h2><ul>" + "".join(
-            f"<li>{esc(x if not isinstance(x, dict) else (x.get('what') or json.dumps(x, ensure_ascii=False)))}</li>"
-            for x in c["changes"]) + "</ul>")
+            inner += (f"<p><small>The footnote</small></p><textarea name='note' data-draft='{esc(cid)}|{v}|note'>"
+                      f"{esc(c.get('proposedNote'))}</textarea>")
+        inner += f"<button name='kind' value='edit'>{LABEL['edit']}</button>"
+        out.append("<details><summary>Edit the words</summary>" + _form(cid, v, inner) + "</details>")
+    if c.get("after"):
+        out.append(f"<h2>The paragraph below</h2><div class='text ctx'>{rich(c.get('after'))}</div>")
     if c.get("review"):
-        out.append(f"<h2>Claude's check against the source</h2><p>{esc(c.get('review'))}</p>")
+        out.append(f"<h2>Claude's check against the source</h2><p>{rich(c.get('review'))}</p>")
     if c.get("note"):
-        out.append(f"<h2>Your words on this card</h2><div class='text'>{esc(c.get('note'))}</div>")
+        out.append(f"<h2>Your words on this card</h2><div class='text'>{rich(c.get('note'))}</div>")
     rest = [b for b in btns if b not in ("approve", "edit")]
     if rest:
-        out.append(f"<h2>Your words to the Editor</h2><form method='post' action='/press' data-card='{esc(cid)}'>"
-                   f"<input type='hidden' name='card' value='{esc(cid)}'><input type='hidden' name='version' value='{v}'>"
+        out.append("<h2>Your words to Claude</h2>" + _form(cid, v,
                    f"<textarea name='text' data-draft='{esc(cid)}|{v}|words' style='min-height:5em'></textarea>"
-                   + "".join(f"<button name='kind' value='{b}'>{LABEL[b]}</button>" for b in rest) + "</form>")
+                   + "".join(f"<button name='kind' value='{b}'>{LABEL[b]}</button>" for b in rest)))
     olds = cards.versions(cid)[:-1]
     if olds:
-        out.append(f"<details><summary>Older versions ({len(olds)})</summary>" + "".join(
-            f"<p><small>v{o['version']}, {esc(o['at'])}, by {esc(o.get('by'))}</small></p>"
-            f"<div class='text'>{esc((o.get('card') or {}).get('proposedPara'))}</div>" for o in reversed(olds))
+        out.append(f"<details><summary>Earlier versions ({len(olds)})</summary>" + "".join(
+            f"<p><small>version {o['version']}, {esc(o['at'])}</small></p>"
+            f"<div class='text'>{rich((o.get('card') or {}).get('proposedPara'))}</div>" for o in reversed(olds))
             + "</details>")
-    out.append(f"<p><a href='/?after={quote(cid)}'>Next card →</a></p>")
+    ch = cards.chapter_of(c)
+    out.append(f"<p><a href='/?after={quote(cid)}'>Next card →</a>"
+               + (f" · <a href='/chapter/{ch}'>Chapter {ch}</a>" if ch is not None else "") + "</p>")
     return "".join(out)
+
+
+def line_of(c):
+    m = re.search(r"/L(\d+)", str(c.get("where") or ""))
+    return int(m.group(1)) if m else 0
 
 
 def ordered(g):
@@ -312,7 +421,7 @@ def ordered(g):
         lane, why = g.lane(cid, c)
         rows.append((lane, cid, c, why))
     rank = {l: i for i, l in enumerate(LANES + ("closed",))}
-    rows.sort(key=lambda r: (rank[r[0]], cards.chapter_of(r[2]) or 999, r[1]))
+    rows.sort(key=lambda r: (rank[r[0]], cards.chapter_of(r[2]) or 999, line_of(r[2]), r[1]))
     return rows
 
 
@@ -413,26 +522,52 @@ def record_press(form):
     if version != c["_version"]:
         return refuse(f"you saw version {version}; Claude has written version {c['_version']} since")
     lane, _ = g.lane(cid, c)
+    choice = None
+    if kind.startswith("approve#"):
+        import card_shape as S
+        try:
+            choice = int(kind.split("#", 1)[1])
+        except ValueError:
+            choice = 0
+        if not 1 <= choice <= len(S.choices_of(c)):
+            return refuse(f"the card offers no choice {kind.split('#', 1)[1]}")
+        kind = "approve"
     if kind not in BUTTONS[lane]:
         return refuse(f"the {LANE_NAME[lane]} lane offers no {LABEL.get(kind, kind)!r}")
     if kind in NEEDS_WORDS and not text.strip():
         return refuse(f"{LABEL[kind]!r} needs your words, and the box was empty")
     proposed = c.get("proposedPara") or ""
-    if kind == "approve" and text.strip() and text.strip() != proposed.strip():
+    if kind == "approve" and choice is None and text.strip() and text.strip() != proposed.strip():
         return refuse("you changed the text in the box: Approve takes only the text Claude checked. "
                       "Press 'Send my edits for checking' to send your words")
     if kind == "edit" and text.strip() == proposed.strip() and (note is None or note == (c.get("proposedNote") or "")):
         return refuse("the box holds the text as Claude wrote it; there are no edits to send")
-    payload = {"card": cid, "card_version": version, "decision_kind": kind, "lane": lane}
-    if kind in ("edit", "directive", "card-note", "reopen", "keep_closed") and text.strip():
+    if kind == "bring":
+        # HIS ANSWER TO THE THREE-VERSION STOP: a ruling of his naming the card, with no press kind, starts the count again
+        e = vaultlog.append("decision.recorded", actor=B.AUTHOR_ACTOR, card=cid, card_version=version,
+                            answers="three_version_stop", text=text,
+                            why="the author's answer on the card desk: bring the card back to me")
+        return True, f"Recorded: {LABEL[kind]} (event {e['hash']})."
+    dk, what = KIND.get(kind, (kind, None))
+    payload = {"card": cid, "card_version": version, "decision_kind": dk, "lane": lane}
+    if what:
+        payload["what"] = what
+    if choice is not None:
+        import card_shape as S
+        payload.update(choice=choice, choice_text=S.choice_book_text(c, choice))
+    if dk in ("edit", "directive", "card-note", "reopen", "keep_closed") and text.strip():
         payload["text"] = text
-    if kind == "edit" and note is not None:
+    if dk == "edit" and note is not None:
         payload["note"] = note
-    if kind == "reopen":
+    if dk == "reopen":
         payload["what"] = "applied" if lane == "applied" else "line"
+    label = f"Approve choice {choice}" if choice else LABEL[kind]
     e = vaultlog.append("decision.recorded", actor=B.AUTHOR_ACTOR,
-                        why=f"the author's press on the card desk: {LABEL[kind]}", **payload)
-    return True, f"Recorded: {LABEL[kind]} (event {e['hash']})."
+                        why=f"the author's press on the card desk: {label}", **payload)
+    if dk == "approve":
+        return True, (f"Recorded: {label} (event {e['hash']}). You can undo it for "
+                      f"{int(B.APPROVE_WAIT // 60) or int(B.APPROVE_WAIT)} {'minutes' if B.APPROVE_WAIT >= 60 else 'seconds'}.")
+    return True, f"Recorded: {label} (event {e['hash']})."
 
 
 def record_answer(form):
@@ -533,35 +668,74 @@ def route(path, q, msg=""):
         for lane, cid, c, why in rows:
             if want and lane != want:
                 continue
-            out.append(f"<tr><td>{esc(LANE_NAME[lane])}</td><td><a href='/card/{quote(cid)}'>{esc(c.get('title'))}</a>"
-                       f"<br><small>{esc(c.get('where'))}</small>"
+            out.append(f"<tr><td>{esc(LANE_NAME[lane])}</td><td><a href='/card/{quote(cid)}'>{rich(c.get('title'))}</a>"
+                       f"<br><small>{esc(where(c.get('where')))}</small>"
                        + (f"<br><small>{esc('; '.join(str(w) for w in why)[:300])}</small>" if why else "")
                        + "</td></tr>")
         out.append("</table>")
         return (page(LANE_NAME[want] if want else "All", "".join(out)),)
+    if path.startswith("/chapter/"):
+        try:
+            n = int(path[len("/chapter/"):])
+        except ValueError:
+            raise LookupError(f"no chapter {path[len('/chapter/'):]!r}")
+        mine = [r for r in rows if r[0] in ("reopen", "yours", "approving") and cards.chapter_of(r[2]) == n]
+        mine.sort(key=lambda r: (line_of(r[2]), r[1]))
+        out = [f"<h1>Chapter {n}: {len(mine)} card(s) for you, in line order</h1>"]
+        for lane, cid, c, why in mine:
+            out.append(f"<section class='change'>{show_card(cid, c, lane, why)}</section>")
+        if not mine:
+            out.append("<p>No card in this chapter waits for you now.</p>")
+        return (page(f"Chapter {n}", "".join(out)),)
     if path == "/":
         after = (q.get("after") or [""])[0]
+        asked = [r for r in rows if r[0] == "question"]
+        top = ""
+        if asked and not after:
+            top = ("<h2>Questions for you</h2><ul>" + "".join(
+                f"<li><a href='/card/{quote(cid)}'>{rich(c.get('title'))}</a><br><small>{esc(why[0])}</small></li>"
+                for _l, cid, c, why in asked) + "</ul>")
         mine = [r for r in rows if r[0] in ("reopen", "yours")]
         if after:
             ids = [r[1] for r in mine]
             mine = mine[ids.index(after) + 1:] if after in ids else mine
         if not mine:
-            counts = {}
-            for r in rows:
-                counts[r[0]] = counts.get(r[0], 0) + 1
-            return (page("Nothing waiting", "<h1>No card waits on you.</h1><p>"
-                         + ", ".join(f"{LANE_NAME[k]}: {v}" for k, v in counts.items()) + "</p>"),)
+            n = sum(1 for r in rows if r[0] == "claude")
+            return (page("Nothing waiting", top + "<h1>No card waits for you now.</h1>"
+                         + (f"<p>Claude is fixing {n} card(s); each comes to you when it is ready.</p>" if n else "")),)
         lane, cid, c, why = mine[0]
-        return (page(c.get("title") or cid, show_card(cid, c, lane, why, msg)),)
+        chs = sorted({cards.chapter_of(r[2]) for r in mine if cards.chapter_of(r[2]) is not None})
+        bar = ("<p><small>By chapter: " + " · ".join(f"<a href='/chapter/{n}'>Chapter {n}</a>" for n in chs)
+               + "</small></p>") if chs else ""
+        return (page(c.get("title") or cid, top + bar + show_card(cid, c, lane, why, msg)),)
     raise LookupError(f"no page {path!r}")
+
+
+def as_text(h):
+    """A page as plain text, the way the author reads it: what a fresh reviewer reads."""
+    h = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", h, flags=re.S)
+    h = re.sub(r"<textarea[^>]*>(.*?)</textarea>", r"[box] \1", h, flags=re.S)
+    h = re.sub(r"<button[^>]*>(.*?)</button>", r"[button: \1] ", h, flags=re.S)
+    h = re.sub(r"</(p|div|h1|h2|h3|li|tr|section|summary|blockquote)>|<br>", "\n", h)
+    t = html.unescape(re.sub(r"<[^>]+>", "", h))
+    return re.sub(r"\n\s*\n+", "\n\n", t).strip()
 
 
 def main(argv):
     port = int(argv[argv.index("--port") + 1]) if "--port" in argv else B.DESK_PORT
+    if "--show" in argv:
+        cid = argv[argv.index("--show") + 1]
+        r = next((r for r in ordered(Gates()) if r[1] == cid), None)
+        if r is None:
+            print(f"no card {cid!r}")
+            return 1
+        print(as_text(show_card(cid, r[2], r[0], r[3])))
+        return 0
     if "--check" in argv:
         g = Gates()
         rows = ordered(g)
-        for p in ["/", "/all", "/asks", "/sources"] + [f"/lane/{l}" for l in LANES] + [f"/card/{quote(r[1])}" for r in rows]:
+        for p in ["/", "/all", "/asks", "/sources"] + [f"/lane/{l}" for l in LANES] \
+                + [f"/chapter/{n}" for n in sorted({cards.chapter_of(r[2]) for r in rows} - {None})] + [f"/card/{quote(r[1])}" for r in rows]:
             route(urlparse(p).path, {})
         lanes = {}
         for r in rows:

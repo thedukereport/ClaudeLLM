@@ -14,11 +14,13 @@ They do not, directly. Each role writes to the files it owns (the table in `Role
 
 ## Your one queue
 
-The card desk, http://127.0.0.1:8766 (`tools/card-desk.py`), is the one place you rule. It shows one card at a time; "Next card" takes you down the queue.
+The card desk, http://127.0.0.1:8766 (`tools/card-desk.py`), is the one place you rule. It shows one card at a time; "Next card" takes you down the queue, and each chapter's link shows that chapter's cards in line order.
 
-- **Waiting for you:** each card with the current text and the proposed text in full, and the paragraphs around them. Approve it; or edit the text in the box and press "Send my edits for checking"; or write a directive. Your words are kept in your browser until you press a button.
-- **Reopen?:** a card that would change a line you already approved, in full, with "Reopen this line" and "Keep it closed". A line you approved comes back here only when a reading shows it wrong.
-- **With Claude:** the cards that are not ready, each with its reason: a fact with no logged read, a banned word, a prose audit no second session has done, a note your rules send back, a card the chapter has moved under, or your own edits waiting to be checked. You never have to rule on these.
+- **Questions for you:** a card Claude has rewritten three times since your directive without your Approve. It shows your words and the versions since, with "Bring it back to me"; the Managing Editor has it in hand.
+- **Waiting for you:** each card opens with its answer to your words, if you gave any, then a short TLDR and one recommendation; then What changed, each change as it reads now and as it will read, with its reason; then the paragraphs around it, the current text and the proposed text in full. Approve it (on a card with choices, "Approve choice 1" or "Approve choice 2"); edit the text and press "Send my edits for checking"; write a directive; or press "Keep it the way it is". Your words are kept in your browser until you press a button.
+- **Approved, you can undo it:** for five minutes after you approve, the card waits here with "Undo my approval", and nothing acts on it.
+- **Reopen?:** a card that would change a line you already approved, in full, with "Reopen this line" and "Keep it the way it is". A line you approved comes back here only when a reading shows it wrong.
+- **With Claude:** the cards that are not ready; each says so in one line, and the reasons, for Claude, sit in a fold: a fact with no logged read, a banned word, a prose audit no second session has done, a note your rules send back, a card the chapter has moved under, or your own edits waiting to be checked. You never have to rule on these.
 - **Approved, going in** and **In the book:** what Production will apply, and what it has.
 - **Asks:** questions only you can answer, each saying what happens if you say nothing. They are kept on file in `Fact Check/Asks.md`.
 - **Sources to get:** only works the library cannot produce, as "I cannot find these. Can you get them?" A cited work in the library that nobody has read yet goes to the Fact-checker to read; it never comes to you.

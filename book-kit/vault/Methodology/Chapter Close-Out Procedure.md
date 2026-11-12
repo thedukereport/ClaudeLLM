@@ -121,7 +121,7 @@ tools/check-lock-ready.sh NN
 It looks at:
 
 - **open Punch List items** naming the chapter (`Punch List.md`)
-- **open cards** for the chapter in the card store (`Fact Check/Cards/cards.jsonl`): any card waiting for the author, sent back, approved or held
+- **open cards** for the chapter in the card store (`Fact Check/Cards/`): any card waiting for the author, sent back, approved or held
 - **the read check**, `tools/check-read.sh NN --strict`: a chapter citing a work nobody opened does not lock
 - **banned words** (`tools/check-banned-words.sh NN`)
 - **epistemics** (`tools/check-epistemics.sh NN`)

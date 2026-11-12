@@ -21,11 +21,18 @@ A card is one proposal on the card desk, built by the Editor (or QA), ruled by t
 
 ## The fields of a card
 
-Each card is one JSON record. `tools/cards.py add <card.json> --why "<reason>"` puts it in `Fact Check/Cards/cards.jsonl` as a new version; the record's `id` names the card. The store keeps every version, and the author's presses on a version are events in the log, so a card's status now is the store's newest version with the presses after it (`tools/cards.py show <id>`).
+Each card is one JSON record. `tools/cards.py add <card.json> --why "<reason>"` puts it in the card store, `Fact Check/Cards/`, as a new version; the record's `id` names the card. The store keeps every version, and the author's presses on a version are events in the log, so a card's status now is the store's newest version with the presses after it (`tools/cards.py show <id>`).
 
 | field | what it holds | who writes it |
 |---|---|---|
-| `title` | `Ch NN · <short plain title naming the problem>` — the name the author rules by | Editor |
+| `title` | `Ch NN · <short plain title naming the problem>` — the name the author rules by; after the author's directive, a title that says what this version does about the author's words | Editor |
+| `answer` | after the author's directive or edits: `{"his": the author's words, quoted whole, "answer": the answer in full}`. The desk shows it first | Editor |
+| `tldr` | two or three plain sentences: what the card does. No role names | Editor |
+| `recommendation` | one sentence: the press recommended | Editor |
+| `subject` | one line: what the paragraph is about | Editor |
+| `changeList[]` | every change, `{where, before, after, why}`; on a card with choices, the entry the choices touch gives `choices: [{label, reason, after}]`, one option per choice | Editor |
+| `choices[]` | two or more ways to write the line, each `{label, reason, text}`: one decision, with its own "Approve choice N". A change that goes in under every choice goes on a card of its own | Editor, only when the author must choose |
+| `queuedBehind` | the id of an open card on the same lines that must be applied first; the card goes in held and goes up when that one is applied | Editor |
 | `chapter` | the chapter number | Editor |
 | `where` | the coordinate or coordinates, `Ch##/L##`, and the note slug where one is in play | Editor |
 | `job` | one sentence: the paragraph's job in the chapter's argument, taken from the chapter | Editor |
@@ -39,12 +46,12 @@ Each card is one JSON record. `tools/cards.py add <card.json> --why "<reason>"` 
 | `noteless` | `true` when the card has no note box (its notes, if any, are segments of `proposedPara`) | Editor |
 | `removed[]` | any words a proposal takes out of a note, with the reason (earlier versions of the card stay in the store, and the desk shows them in a fold) | Editor |
 | `review` | Claude's check, shown to the author under the proposal: the six directives and the footnote steps below, each answered with evidence | Editor |
-| `status` | `yours` (with the author, open), `submitted` (the author sent edits or a directive), `approved` (the author pressed Approve), `applied` (Production wrote it into the chapter), `held` (its owner took it off the desk), `superseded` | the Editor writes `yours`; the author's presses and Production's apply set the rest (`tools/cards.py fold`); `tools/cards.py hold` sets `held` |
-| `submittedAt`, `approvedAt`, `appliedAt`, `note`, `notedAt`, `directiveAt` | times and the author's words, folded in from the author's presses | `tools/cards.py fold`, never written by hand |
+| `status` | `yours` (with the author, open), `submitted` (the author sent edits or a directive), `approving` (the author pressed Approve inside the five-minute wait), `approved`, `applied` (Production wrote it into the chapter), `held` (its owner took it off the desk), `superseded` (closed, never applied: replaced, withdrawn by its writer, or kept the way it is by the author) | the Editor writes `yours`, or `approved` with `reopenedBy` "format-only" for a formatting change; the author's presses and Production's apply set the rest (`tools/cards.py fold`); `hold`, `withdraw` and `supersede` set theirs |
+| `submittedAt`, `approvedAt`, `approvedChoice`, `approvedText`, `settlesAt`, `appliedAt`, `note`, `notedAt`, `directiveAt` | times and the author's words, folded in from the author's presses | `tools/cards.py fold`, never written by hand |
 | `reviewedPara`, `reviewedNote` | the text Claude last checked | Editor |
 | `reopenedBy` | the hash of the author's own `decision.recorded` event that reopens a closed line; one way past the closed-line check (the other is the author's "Reopen this line" press on the desk) | Editor, only from the author's words |
 
-The gates are not fields. The card desk runs each one every time it draws a card (the note check, the closed-line check, the banned words, the unread facts, the prose audit by a second session, and whether the card still reads as the chapter does), and holds a card that fails one under "With Claude" with the reason. `tools/cards.py add` runs the word and read gates as the version goes in (`book.toml` `[gates]`).
+The gates are not fields. The card desk runs each one every time it draws a card (the note check, the closed-line check, the banned words, the unread facts, the prose audit by a second session, and whether the card still reads as the chapter does), and holds a card that fails one under "With Claude" with the reason. `tools/cards.py add` runs the rest as the version goes in: the banned words in the text and in the card's own words, the unread facts, a pointer to another part of the book, a second open card on the same paragraph, a formatting-only change, the TLDR and the reasons, the choices, the answer to the author's directive, and the three-version stop (`book.toml` `[gates]`; `tools/card_shape.py <id>` lists them for one card). `tools/cards.py release` runs them again, then the second session's prose audit, the desk audit (`tools/desk_audit.py`) and the fresh reviewer's verdict.
 
 ## The review: six directives
 
@@ -75,4 +82,6 @@ For any card that touches a footnote, after the directives:
 2. Run `tools/card-log.py` for the sources the card names, so each read is on record before the author sees it (`tools/check-card-logged.py` reports any that is not). `tools/card_reads.py --card <id>` lists any name, number, date or quotation in the passage still without an opened read; those go to the Fact-checker first.
 3. Put it in the store: `tools/cards.py add <card.json> --why "<reason>"`. A new version of an existing card is a new line in the store; the old version stays there whole and never stands beside the new one on the desk.
 4. Ask a second session (QA, or the Editor for QA's cards) to audit its prose and record the audit.
-5. Note the card by its title in `Handoffs/Editor.md`. If it is not ready, `tools/cards.py hold <id> --by Editor --reason "<why>"` keeps it off the author's desk until `release`.
+5. Have a fresh reader review it as the author will see it: `python3 tools/card-desk.py --show <id>` prints the page, and `tools/cards.py review-pass <id> --version <n> --verdict PASS|FAIL --note "<what was read>"` records the verdict. For a card that answers the author's directive, run the six reviewers instead: `tools/review_pipeline.py packet <id>`, six fresh subagents, one per prompt, then `record` each verdict. A FAIL is fixed in one new version, and `tools/cards.py review-fix <id> --fix "1=<the words that answer finding 1>"` records the fix list.
+6. Note the card by its title in `Handoffs/Editor.md`. A card that is not ready stays held (`tools/cards.py hold <id> --by Editor --reason "<why>"`); a version written to a held card stays held; `tools/cards.py release <id> --by Editor` puts it before the author once its gates, audit and review pass.
+7. A card the author never approved, and that no longer needs to go in, closes by its writer's own door: `tools/cards.py withdraw <id> --by Editor --reason "<why>"`, or `supersede <id> --by-card <other>` when another card replaces it. Three versions after the author's directive with no Approve: stop, and send the card to the Managing Editor.

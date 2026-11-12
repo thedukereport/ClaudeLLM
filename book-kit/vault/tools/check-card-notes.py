@@ -55,6 +55,22 @@ WHAT IT DOES, PER CARD
        An `instruct` ruling is printed with the finding for the reader; it
        refuses nothing by itself.
 
+    6. THE FOOTNOTE PROTOCOL (`.claude/skills/footnote-pass/SKILL.md`), on each
+       sentence of each note the card proposes; pile PROTOCOL, with the rule:
+         URL           "URLs are not navigation."
+         BOOK POINTER  no note points the reader to another part of this book
+         CHECKED       how the source was checked or accessed is the ledger's,
+                       not the reader's ("verified against", "accessed")
+         JUDGES        a note says where a thing is, never how much to trust it
+                       ("the standard reference", "the best account")
+         RETELLS       a sentence on what a source does ("Smith documents …"):
+                       promote what the body lacks into the body, else cut it
+         ONE WORK      one note per mention: a note cites one work
+       The author, in the system this kit comes from: "We already have a
+       footnote protocol. Why are we not applying what has already been
+       built?" book.toml [gates] card_notes_protocol: "warn" reports these and
+       holds nothing; "refuse" holds the card, on the author's ok to a sample.
+
     A clause holding a citation is reported with its pile, never cut: this
     tool edits nothing, anywhere. Chapters listed in book.toml [workflow]
     out_of_workflow are skipped. Applied cards are skipped.
@@ -128,6 +144,38 @@ def sort_clause(cl, anchor_words, anchor_text):
     return pile, why, None
 
 
+URL = re.compile(r"https?://|\bwww\.|\b[\w-]+\.(?:com|org|net|gov|edu|io)/", re.I)
+BOOK_POINTER = re.compile(r"\b(?:see|in|at|cf\.)\s+(?:Chapter|Ch\.)\s*\d+\b|\bAppendix\s+[A-Z]\b|\bthis (?:book|chapter)['’]s\b"
+                          r"|\b(?:the )?(?:next|previous|earlier|later|following) chapter\b", re.I)
+CHECKED = re.compile(r"\b(?:verified (?:via|against|in|by)|checked (?:via|against)|confirmed (?:via|against)|"
+                     r"accessed|retrieved|the copy read|read here)\b", re.I)
+JUDGES = re.compile(r"^\s*(?:the\s+)?(?:standard|main|primary|key|best|definitive|authoritative|most reliable)\s+"
+                    r"(?:reference|source|account|biography|study|treatment|work|edition)\b", re.I)
+RETELLS = re.compile(r"^\s*(?:[A-Z][\w.'’-]*\s+){1,3}(?:traces|summari[sz]es|documents|describes|recounts|details|"
+                     r"discusses|covers|surveys|argues|shows|chronicles|examines|explores|analy[sz]es|reviews)\b")
+AUTHOR_WORK = re.compile(r"(?:^|[.;]\s+|\bsee also\s+|\band\s+)[A-Z][\w.'’-]+(?:\s+(?:[A-Z][\w.'’-]+|de|van|von|du|of|and|&))*"
+                         r",\s+(?:\*([^*]{3,})\*|[\"“]([^\"”]{3,})[\"”])")
+SAME_WORK = re.compile(r"in English|translat\w*|\btrans\.|published (?:in|as)|reprinted|English edition|original", re.I)
+
+
+def protocol_findings(note):
+    """[(rule, why, sentence)] for one note's text, under the footnote protocol (step 6)."""
+    out = []
+    for s in cnc.sentences(note):
+        s = s.strip()
+        for rx, rule, why in ((URL, "URL", "URLs are not navigation"),
+                              (BOOK_POINTER, "BOOK POINTER", "a note never points the reader to another part of this book"),
+                              (CHECKED, "CHECKED", "how the source was checked belongs in the ledger, not the note"),
+                              (JUDGES, "JUDGES", "a note says where a thing is, never how much to trust it"),
+                              (RETELLS, "RETELLS", "it says what the source does: promote what the body lacks, cut the rest")):
+            if rx.search(s):
+                out.append((rule, why, s))
+    titles = {(m.group(1) or m.group(2)).strip().lower() for m in AUTHOR_WORK.finditer(note)}
+    if len(titles) >= 2 and not SAME_WORK.search(note):
+        out.append(("ONE WORK", f"the note cites {len(titles)} works; one note per mention", note[:200]))
+    return out
+
+
 def last_rulings():
     import vaultlog
     out = {}
@@ -187,6 +235,10 @@ def check_card(cid, card, rulings):
                                      + (f" ({ov:.0%} of the quotation's words)" if ov is not None else "")
                                      + ("; the card changes no body paragraph to hold it" if pile == "CONTENT" else ""),
                                      "clause": cl, "cites": bool(cnc.LOCATOR.search(cl))})
+        refuse6 = B.gate_mode("card_notes_protocol") == "refuse"
+        for rule, why, sent in protocol_findings(note):
+            findings.append({"slug": slug, "where": where, "pile": "PROTOCOL", "why": f"{rule}: {why}",
+                             "clause": sent, "cites": bool(cnc.LOCATOR.search(sent)), "holds": refuse6})
         r = rulings.get((ch, slug))
         if r:
             k, said = r.get("note_kind"), (r.get("text") or "").strip()
@@ -203,9 +255,9 @@ def check_card(cid, card, rulings):
                 findings.append({"slug": slug, "where": where, "pile": "RULING", "why": bad
                                  + f" (your ruling {r.get('ts','')[:10]}" + (f': "{said}"' if said else "") + ")",
                                  "clause": "", "cites": False})
-    if not findings:
-        return {"card": cid, "title": C.norm(card.get("title")), "status": card.get("status"), "ok": True, "findings": [], "text": text}
-    return {"card": cid, "title": C.norm(card.get("title")), "status": card.get("status"), "ok": False, "findings": findings, "text": text}
+    ok = not any(f.get("holds", True) for f in findings)
+    return {"card": cid, "title": C.norm(card.get("title")), "status": card.get("status"), "ok": ok,
+            "findings": findings, "text": text}
 
 
 def main(argv):

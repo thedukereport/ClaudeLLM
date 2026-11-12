@@ -16,6 +16,17 @@ port = 8766
 
 [gates]
 card_words = "warn"
+card_own_words = "warn"
 card_reads = "warn"
+card_pointer = "warn"
+card_overlap = "warn"
+card_format_only = "warn"
+card_summary = "warn"
+card_choices = "warn"
+card_answer = "warn"
+card_three_versions = "warn"
+card_notes_protocol = "warn"
 card_cross_audit = "warn"
+card_desk_audit = "warn"
+card_review = "warn"
 card_refresh = "report"

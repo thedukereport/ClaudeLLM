@@ -127,6 +127,7 @@ HANDOFFS = _vpath("handoffs", "Handoffs")
 METHODOLOGY = _vpath("methodology", "Methodology")
 CARDS = _vpath("card_reads", "Handoffs/editor-tools/cards")
 CARD_STORE = _vpath("cards", "Fact Check/Cards/cards.jsonl")   # every card version, one line each
+CARD_DIR = CARD_STORE.parent    # once split by day: cards-YYYY-MM-DD.jsonl here (tools/cards.py split-by-day)
 DESK_LOAD = _vpath("desk_load", "Handoffs/editor-tools/desk-load")   # what dashboard-sync.py builds for the desk
 WORD_LISTS = METHODOLOGY / "Word Lists.md"
 ASKS = FACT / "Asks.md"
@@ -149,6 +150,8 @@ LIBRARY_INDEX = FACT / _lib.get("index_file", "Library Index.json")
 
 DESK_PORT = int(_desk.get("port", 8766))
 DESK_URL = f"http://127.0.0.1:{DESK_PORT}"
+#: Seconds an Approve waits on the desk, with an Undo button, before any tool acts on it ([desk] approve_wait_seconds).
+APPROVE_WAIT = float(os.environ.get("BOOK_APPROVE_WAIT") or _desk.get("approve_wait_seconds", 300))
 OUT_OF_WORKFLOW = set(int(x) for x in _wf.get("out_of_workflow", []))
 PDF_OUT = _abs(_out["pdf_dir"]) if _out.get("pdf_dir") else None
 SNAPSHOT_DEST = _abs(_out["snapshot_dir"]) if _out.get("snapshot_dir") else None
